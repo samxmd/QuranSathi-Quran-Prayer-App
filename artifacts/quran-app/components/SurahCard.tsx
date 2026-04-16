@@ -1,6 +1,5 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import type { Surah } from "@/data/surahs";
 import { useTheme } from "@/hooks/useTheme";
 import { getSurahsWithData } from "@/data/ayahs";
@@ -10,11 +9,11 @@ interface SurahCardProps {
   onPress: () => void;
 }
 
-const SURAHS_WITH_DATA = new Set(getSurahsWithData());
+const SURAHS_WITH_NEPALI = new Set(getSurahsWithData());
 
 export function SurahCard({ surah, onPress }: SurahCardProps) {
   const theme = useTheme();
-  const hasData = SURAHS_WITH_DATA.has(surah.id);
+  const hasNepali = SURAHS_WITH_NEPALI.has(surah.id);
 
   return (
     <TouchableOpacity
@@ -30,9 +29,9 @@ export function SurahCard({ surah, onPress }: SurahCardProps) {
           <Text style={[styles.nameEnglish, { color: theme.foreground }]}>
             {surah.nameEnglish}
           </Text>
-          {!hasData && (
-            <View style={[styles.badge, { backgroundColor: theme.muted }]}>
-              <Text style={[styles.badgeText, { color: theme.mutedForeground }]}>API Soon</Text>
+          {hasNepali && (
+            <View style={[styles.badge, { backgroundColor: theme.secondary }]}>
+              <Text style={[styles.badgeText, { color: theme.primary }]}>नेपाली</Text>
             </View>
           )}
         </View>

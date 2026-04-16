@@ -1,6 +1,5 @@
-import * as Haptics from "expo-haptics";
-import { router, Stack, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Stack, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -13,34 +12,57 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { AyahCard } from "@/components/AyahCard";
-import { getAyahsForSurah, type Ayah } from "@/data/ayahs";
+import type { Ayah } from "@/data/ayahs";
 import { SURAHS } from "@/data/surahs";
 import { useQuran } from "@/context/QuranContext";
 import { useTheme } from "@/hooks/useTheme";
+import { fetchSurahAyahs } from "@/services/quranApi";
+
+type LoadState = "loading" | "success" | "error" | "offline";
 
 export default function ReaderScreen() {
-  const { id } = useLocalSearchParams<{ id: string; ayah?: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { setLastRead, fontSize, showEnglish, showNepali } = useQuran();
 
   const surahId = Number(id);
   const surah = SURAHS.find((s) => s.id === surahId);
-  const ayahs = surah ? getAyahsForSurah(surahId) : [];
-  const hasData = ayahs.length > 0;
+
+  const [ayahs, setAyahs] = useState<Ayah[]>([]);
+  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isCached, setIsCached] = useState(false);
 
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
 
-  useEffect(() => {
-    if (surah) {
-      setLastRead({
-        surahId: surah.id,
-        ayahNumber: 1,
-        surahName: surah.nameEnglish,
-        timestamp: Date.now(),
-      });
+  const loadAyahs = async (surahIdToLoad: number) => {
+    setLoadState("loading");
+    setErrorMessage("");
+    try {
+      const data = await fetchSurahAyahs(surahIdToLoad);
+      setAyahs(data);
+      setLoadState("success");
+    } catch (err: any) {
+      const isNetworkError =
+        err?.message?.includes("Network") ||
+        err?.message?.includes("fetch") ||
+        err?.message?.includes("Failed");
+      setLoadState(isNetworkError ? "offline" : "error");
+      setErrorMessage(err?.message ?? "Unknown error");
     }
-  }, [surah]);
+  };
+
+  useEffect(() => {
+    if (!surah) return;
+    loadAyahs(surah.id);
+    setLastRead({
+      surahId: surah.id,
+      ayahNumber: 1,
+      surahName: surah.nameEnglish,
+      timestamp: Date.now(),
+    });
+  }, [surah?.id]);
 
   if (!surah) {
     return (
@@ -84,7 +106,42 @@ export default function ReaderScreen() {
         )}
       </View>
 
-      {hasData ? (
+      {loadState === "loading" && (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={theme.primary} />
+          <Text style={[styles.loadingText, { color: theme.mutedForeground }]}>
+            Loading {surah.nameEnglish}...
+          </Text>
+        </View>
+      )}
+
+      {(loadState === "error" || loadState === "offline") && (
+        <View style={styles.center}>
+          <Feather
+            name={loadState === "offline" ? "wifi-off" : "alert-circle"}
+            size={44}
+            color={theme.mutedForeground}
+          />
+          <Text style={[styles.errorTitle, { color: theme.foreground }]}>
+            {loadState === "offline" ? "No internet connection" : "Failed to load"}
+          </Text>
+          <Text style={[styles.errorSub, { color: theme.mutedForeground }]}>
+            {loadState === "offline"
+              ? "Connect to the internet to read this surah. Data is cached after first load."
+              : errorMessage}
+          </Text>
+          <TouchableOpacity
+            style={[styles.retryBtn, { backgroundColor: theme.primary }]}
+            onPress={() => loadAyahs(surah.id)}
+            activeOpacity={0.85}
+          >
+            <Feather name="refresh-cw" size={16} color={theme.primaryForeground} />
+            <Text style={[styles.retryText, { color: theme.primaryForeground }]}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {loadState === "success" && (
         <FlatList
           data={ayahs}
           keyExtractor={(item) => item.id}
@@ -100,20 +157,18 @@ export default function ReaderScreen() {
           contentContainerStyle={{ paddingTop: 16, paddingBottom: bottomInset + 60 }}
           showsVerticalScrollIndicator={false}
           scrollEnabled={ayahs.length > 0}
+          ListFooterComponent={
+            <View style={styles.footer}>
+              <View style={[styles.footerLine, { backgroundColor: theme.border }]} />
+              <Text style={[styles.footerText, { color: theme.mutedForeground }]}>
+                End of {surah.nameEnglish}
+              </Text>
+              <Text style={[styles.footerArabic, { color: theme.primary }]}>
+                {surah.nameArabic}
+              </Text>
+            </View>
+          }
         />
-      ) : (
-        <View style={styles.noDataContainer}>
-          <Feather name="book" size={48} color={theme.mutedForeground} />
-          <Text style={[styles.noDataTitle, { color: theme.foreground }]}>
-            Full Quran data coming soon
-          </Text>
-          <Text style={[styles.noDataText, { color: theme.mutedForeground }]}>
-            Complete Arabic text with verified Nepali and English translations for all 6,236 ayahs will be integrated in the next update.
-          </Text>
-          <Text style={[styles.noDataSurah, { color: theme.primary }]}>
-            {surah.totalAyahs} ayahs in this surah
-          </Text>
-        </View>
       )}
     </View>
   );
@@ -127,10 +182,42 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
+    padding: 32,
+  },
+  loadingText: {
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    marginTop: 8,
   },
   errorText: {
     fontSize: 16,
     fontFamily: "Inter_400Regular",
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+    marginTop: 4,
+  },
+  errorSub: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  retryText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
   },
   surahHeader: {
     padding: 24,
@@ -169,28 +256,22 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     textAlign: "center",
   },
-  noDataContainer: {
-    flex: 1,
+  footer: {
     alignItems: "center",
-    justifyContent: "center",
-    padding: 40,
-    gap: 12,
+    paddingVertical: 32,
+    gap: 8,
   },
-  noDataTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    textAlign: "center",
-    marginTop: 8,
+  footerLine: {
+    width: 60,
+    height: 1,
+    marginBottom: 4,
   },
-  noDataText: {
-    fontSize: 14,
+  footerText: {
+    fontSize: 13,
     fontFamily: "Inter_400Regular",
-    textAlign: "center",
-    lineHeight: 22,
   },
-  noDataSurah: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    marginTop: 8,
+  footerArabic: {
+    fontSize: 22,
+    fontFamily: "Inter_400Regular",
   },
 });
