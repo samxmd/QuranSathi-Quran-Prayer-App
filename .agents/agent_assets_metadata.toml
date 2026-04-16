@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "mxvcRLKYcr6nVjhX3U1d5"
+uri = "file://artifacts/quran-app/assets/images/icon.png"
+type = "image"
+title = "quran app icon"

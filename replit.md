@@ -16,6 +16,40 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 
+## Artifacts
+
+### Quran App (Mobile - Expo)
+- **Path**: `artifacts/quran-app/`
+- **Preview**: `/` (root path)
+- **Tech**: React Native + Expo Router
+- **Storage**: AsyncStorage (no backend needed)
+
+#### Features
+- Arabic Quran text display
+- English translation (Sahih International)
+- Nepali translation (unique feature)
+- All 114 Surah list with search + filter (Meccan/Medinan)
+- Full ayah reader with Basmala header
+- Bookmark system (persistent via AsyncStorage)
+- Last read tracking
+- Adjustable Arabic font size (20–36pt)
+- Toggle English/Nepali translations independently
+- Dark mode support
+- Emerald green Islamic color theme
+
+#### Data
+- All 114 surahs with Arabic/English/Nepali names and metadata
+- Full ayah data for: Al-Fatiha (1), Ar-Rahman (55, partial), Al-Mulk (67, partial), Al-Qadr (97), Al-Ikhlas (112), Al-Falaq (113), An-Nas (114)
+- Remaining surahs show a "coming soon" placeholder until full data is integrated
+
+### API Server
+- **Path**: `artifacts/api-server/`
+- **Port**: 8080 (routed via `/api`)
+
+### Canvas / Mockup Sandbox
+- **Path**: `artifacts/mockup-sandbox/`
+- **Preview**: `/__mockup`
+
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages
