@@ -2,18 +2,14 @@ import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { Surah } from "@/data/surahs";
 import { useTheme } from "@/hooks/useTheme";
-import { getSurahsWithData } from "@/data/ayahs";
 
 interface SurahCardProps {
   surah: Surah;
   onPress: () => void;
 }
 
-const SURAHS_WITH_NEPALI = new Set(getSurahsWithData());
-
 export function SurahCard({ surah, onPress }: SurahCardProps) {
   const theme = useTheme();
-  const hasNepali = SURAHS_WITH_NEPALI.has(surah.id);
 
   return (
     <TouchableOpacity
@@ -29,11 +25,6 @@ export function SurahCard({ surah, onPress }: SurahCardProps) {
           <Text style={[styles.nameEnglish, { color: theme.foreground }]}>
             {surah.nameEnglish}
           </Text>
-          {hasNepali && (
-            <View style={[styles.badge, { backgroundColor: theme.secondary }]}>
-              <Text style={[styles.badgeText, { color: theme.primary }]}>नेपाली</Text>
-            </View>
-          )}
         </View>
         <Text style={[styles.nameNepali, { color: theme.mutedForeground }]}>
           {surah.nameNepali} • {surah.meaning}

@@ -66,8 +66,8 @@ export default function SettingsScreen() {
             <View style={styles.rowLeft}>
               <Feather name="globe" size={18} color={theme.primary} />
               <View>
-                <Text style={[styles.rowLabel, { color: theme.foreground }]}>Nepali Translation</Text>
-                <Text style={[styles.rowSub, { color: theme.mutedForeground }]}>नेपाली अनुवाद</Text>
+                <Text style={[styles.rowLabel, { color: theme.foreground }]}>नेपाली अनुवाद</Text>
+                <Text style={[styles.rowSub, { color: theme.mutedForeground }]}>Ahl Al-Hadith Central Society of Nepal</Text>
               </View>
             </View>
             <Switch
