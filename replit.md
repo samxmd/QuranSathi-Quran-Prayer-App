@@ -10,11 +10,6 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
 
 ## Artifacts
 
@@ -22,40 +17,49 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Path**: `artifacts/quran-app/`
 - **Preview**: `/` (root path)
 - **Tech**: React Native + Expo Router
-- **Storage**: AsyncStorage (no backend needed)
+- **Storage**: AsyncStorage only (no backend)
 
 #### Features
-- Arabic Quran text display
-- English translation (Sahih International)
-- Nepali translation (unique feature)
-- All 114 Surah list with search + filter (Meccan/Medinan)
-- Full ayah reader with Basmala header
-- Bookmark system (persistent via AsyncStorage)
-- Last read tracking
+- Arabic Quran text (Uthmani script) via AlQuran Cloud API
+- English translation (Sahih International) via AlQuran Cloud API
+- Nepali translation (Ahl Al-Hadith Central Society of Nepal, Quran.com ID 108) — all 114 surahs
+- All 114 surahs list with search + Meccan/Medinan filter
+- Full ayah reader with loading/error/offline states
+- Bookmark system (AsyncStorage)
+- Last read tracking with "Continue Reading" on dashboard
+- Reading progress tracking (readSurahIds persisted)
+- Dynamic daily ayah (30-ayah rotating pool, fetched live, cached per day)
+- Time-based Nepali greeting on dashboard
 - Adjustable Arabic font size (20–36pt)
 - Toggle English/Nepali translations independently
-- Dark mode support
-- Emerald green Islamic color theme
+- Dark mode support (toggle, not system-following)
+- Emerald green Islamic color theme (light + dark)
 
-#### Data
-- All 114 surahs with Arabic/English/Nepali names and metadata
-- Full ayah data for: Al-Fatiha (1), Ar-Rahman (55, partial), Al-Mulk (67, partial), Al-Qadr (97), Al-Ikhlas (112), Al-Falaq (113), An-Nas (114)
-- Remaining surahs show a "coming soon" placeholder until full data is integrated
+#### API Integration
+- AlQuran Cloud: `GET /surah/{id}/editions/quran-uthmani,en.sahih`
+- Quran.com: `GET /quran/translations/108?chapter_number={id}`
+- Both fetched in parallel, merged, cached (7-day TTL, key `@quran_surah_v2_{id}`)
+
+#### Key Files
+- `services/quranApi.ts` — API fetch + AsyncStorage cache logic
+- `context/QuranContext.tsx` — global state (bookmarks, lastRead, readSurahIds, settings)
+- `hooks/useDailyAyah.ts` — daily rotating ayah hook
+- `hooks/useTheme.ts` — theme colors from context darkMode toggle
+- `data/surahs.ts` — static metadata for all 114 surahs
+- `app/(tabs)/index.tsx` — dashboard (dynamic greeting, progress, daily ayah)
+- `app/reader/[id].tsx` — surah reader
+- `constants/colors.ts` — light/dark color tokens
 
 ### API Server
 - **Path**: `artifacts/api-server/`
 - **Port**: 8080 (routed via `/api`)
+- Not used by Quran app
 
 ### Canvas / Mockup Sandbox
 - **Path**: `artifacts/mockup-sandbox/`
 - **Preview**: `/__mockup`
+- Design tool only
 
-## Key Commands
+## Detailed Documentation
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
-
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+See `SYSTEM_OVERVIEW.md` for a full technical breakdown of every screen, data flow, API, caching strategy, and design decisions.
