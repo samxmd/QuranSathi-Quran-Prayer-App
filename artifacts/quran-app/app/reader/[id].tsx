@@ -24,7 +24,7 @@ export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { setLastRead, fontSize, showEnglish, showNepali } = useQuran();
+  const { setLastRead, fontSize, showEnglish, showNepali, markSurahRead } = useQuran();
 
   const surahId = Number(id);
   const surah = SURAHS.find((s) => s.id === surahId);
@@ -43,6 +43,7 @@ export default function ReaderScreen() {
       const data = await fetchSurahAyahs(surahIdToLoad);
       setAyahs(data);
       setLoadState("success");
+      markSurahRead(surahIdToLoad);
     } catch (err: any) {
       const isNetworkError =
         err?.message?.includes("Network") ||

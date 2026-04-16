@@ -32,6 +32,8 @@ interface QuranContextType {
   setShowEnglish: (show: boolean) => Promise<void>;
   darkMode: boolean;
   toggleDarkMode: () => Promise<void>;
+  readSurahIds: number[];
+  markSurahRead: (surahId: number) => void;
 }
 
 const QuranContext = createContext<QuranContextType | null>(null);
@@ -43,6 +45,7 @@ const STORAGE_KEYS = {
   SHOW_NEPALI: "@quran_show_nepali",
   SHOW_ENGLISH: "@quran_show_english",
   DARK_MODE: "@quran_dark_mode",
+  READ_SURAHS: "@quran_read_surahs",
 };
 
 export function QuranProvider({ children }: { children: React.ReactNode }) {
@@ -52,6 +55,7 @@ export function QuranProvider({ children }: { children: React.ReactNode }) {
   const [showNepali, setShowNepaliState] = useState<boolean>(true);
   const [showEnglish, setShowEnglishState] = useState<boolean>(true);
   const [darkMode, setDarkMode] = useState<boolean>(false);
+  const [readSurahIds, setReadSurahIds] = useState<number[]>([]);
 
   useEffect(() => {
     loadData();
@@ -59,7 +63,7 @@ export function QuranProvider({ children }: { children: React.ReactNode }) {
 
   const loadData = async () => {
     try {
-      const [bookmarksStr, lastReadStr, fontSizeStr, showNepaliStr, showEnglishStr, darkModeStr] =
+      const [bookmarksStr, lastReadStr, fontSizeStr, showNepaliStr, showEnglishStr, darkModeStr, readSurahsStr] =
         await AsyncStorage.multiGet([
           STORAGE_KEYS.BOOKMARKS,
           STORAGE_KEYS.LAST_READ,
@@ -67,6 +71,7 @@ export function QuranProvider({ children }: { children: React.ReactNode }) {
           STORAGE_KEYS.SHOW_NEPALI,
           STORAGE_KEYS.SHOW_ENGLISH,
           STORAGE_KEYS.DARK_MODE,
+          STORAGE_KEYS.READ_SURAHS,
         ]);
 
       if (bookmarksStr[1]) setBookmarks(JSON.parse(bookmarksStr[1]));
@@ -75,8 +80,8 @@ export function QuranProvider({ children }: { children: React.ReactNode }) {
       if (showNepaliStr[1] !== null) setShowNepaliState(showNepaliStr[1] === "true");
       if (showEnglishStr[1] !== null) setShowEnglishState(showEnglishStr[1] === "true");
       if (darkModeStr[1] !== null) setDarkMode(darkModeStr[1] === "true");
-    } catch (e) {
-    }
+      if (readSurahsStr[1]) setReadSurahIds(JSON.parse(readSurahsStr[1]));
+    } catch (e) {}
   };
 
   const addBookmark = useCallback(async (bookmark: Bookmark) => {
@@ -128,6 +133,15 @@ export function QuranProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const markSurahRead = useCallback((surahId: number) => {
+    setReadSurahIds((prev) => {
+      if (prev.includes(surahId)) return prev;
+      const updated = [...prev, surahId];
+      AsyncStorage.setItem(STORAGE_KEYS.READ_SURAHS, JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+  }, []);
+
   return (
     <QuranContext.Provider
       value={{
@@ -145,6 +159,8 @@ export function QuranProvider({ children }: { children: React.ReactNode }) {
         setShowEnglish,
         darkMode,
         toggleDarkMode,
+        readSurahIds,
+        markSurahRead,
       }}
     >
       {children}
