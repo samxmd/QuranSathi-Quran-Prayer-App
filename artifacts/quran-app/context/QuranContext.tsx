@@ -110,23 +110,19 @@ export function QuranProvider({ children }: { children: React.ReactNode }) {
   const [hasSetLanguage, setHasSetLanguage] = useState<boolean>(true);
 
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
-      // Safety timeout: Never let the app hang on loading for more than 1.5s
-      const safetyTimeout = setTimeout(() => {
-        setIsLoading(false);
-      }, 1500);
+    // Safety timeout: Never let the app hang on loading for more than 2s
+    const safetyTimeout = setTimeout(() => {
+      setIsLoading(false);
+    }, 2000);
 
-      loadData().then(() => {
-        clearTimeout(safetyTimeout);
-        setIsLoading(false);
-      }).catch((err) => {
-        console.error("Failed to load global data:", err);
-        clearTimeout(safetyTimeout);
-        setIsLoading(false);
-      });
+    loadData().then(() => {
+      clearTimeout(safetyTimeout);
+      setIsLoading(false);
+    }).catch((err) => {
+      console.error("Failed to load global data:", err);
+      clearTimeout(safetyTimeout);
+      setIsLoading(false);
     });
-
-    return () => task.cancel();
   }, []);
 
   async function loadData() {
