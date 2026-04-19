@@ -62,7 +62,7 @@ export function LoadingScreen() {
       icons.push(
         <MaterialCommunityIcons 
           key={i} 
-          name="star-eight-pointed" 
+          name="octagram-outline" 
           size={20} 
           color="rgba(255,255,255,0.04)" 
           style={{ margin: 10 }}
