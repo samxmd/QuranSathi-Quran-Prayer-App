@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "QuranSathi",
-    "slug": "quransathi",
+    "slug": "quran-app",
     "version": "1.0.0",
     "updates": {
       "enabled": false,
@@ -34,7 +34,11 @@
       "versionCode": 1,
       "permissions": [
         "INTERNET",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
@@ -78,6 +82,7 @@
       "eas": {
         "projectId": "dc8d0ff8-809e-4432-af5a-66a994f37ff1"
       }
-    }
+    },
+    "owner": "sameerahamadfossa"
   }
 }

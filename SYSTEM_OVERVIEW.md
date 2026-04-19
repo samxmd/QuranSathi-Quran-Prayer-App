@@ -1,370 +1,604 @@
-# Quran App — System Overview
+# Quran App - System Overview
 
-> Last updated: April 16, 2026
+> Last updated: April 18, 2026
 
----
+## 1. Purpose
 
-## 1. Project Purpose
+This repository is a `pnpm` monorepo centered on a multilingual Quran app for Nepali-speaking users, with English and Bangla support across Quran reading and selected UI surfaces.
 
-A mobile Quran application built for **Nepali-speaking Muslims**. The unique value proposition is displaying all 114 surahs with three languages side-by-side:
+The product focus is the Expo mobile app in `artifacts/quran-app`. The repo also contains a backend scaffold, shared API libraries, and a web mockup sandbox, but the Quran app is currently the primary runtime and the main source of product value.
 
-| Language | Source | Notes |
-|----------|--------|-------|
-| Arabic | AlQuran Cloud API (`quran-uthmani` edition) | Uthmani script |
-| English | AlQuran Cloud API (`en.sahih` edition) | Sahih International |
-| Nepali | Quran.com API (Translation ID 108) | Ahl Al-Hadith Central Society of Nepal |
+Current app capabilities include:
 
----
+- Quran reading with Arabic text plus English, Nepali, and Bangla translations
+- Local-first reading with bundled fallback data
+- Ayah bookmarking and continue-reading persistence
+- Daily ayah
+- Prayer times and local prayer notifications
+- Qibla finder
+- Dua collection and dua bookmarking
+- Hijri calendar screen
+- Tafsir Hub for Ibn Kathir commentary
+- Audio playback with multiple reciters
+- Local telemetry and graceful fallback behavior
 
-## 2. Repository Structure
+## 2. Monorepo Layout
 
+```text
+D:\Quran-Nepali-English
+|- artifacts/
+|  |- quran-app/         # Expo / React Native application
+|  |- api-server/        # Express 5 backend scaffold
+|  `- mockup-sandbox/    # Vite + React UI sandbox
+|- lib/
+|  |- api-client-react/  # Shared React API client package
+|  |- api-spec/          # OpenAPI/codegen source
+|  |- api-zod/           # Shared Zod API schemas
+|  `- db/                # Shared Drizzle ORM package
+|- scripts/              # Workspace helper scripts
+|- pnpm-workspace.yaml   # Workspace + catalog + supply-chain policy
+|- pnpm-lock.yaml        # Root workspace lockfile
+|- SYSTEM_OVERVIEW.md    # This file
+`- replit.md             # Project memory / summary
 ```
-workspace/                        ← pnpm monorepo root
-├── artifacts/
-│   ├── quran-app/                ← PRIMARY: React Native / Expo app
-│   ├── api-server/               ← Express 5 API (unused by Quran app)
-│   └── mockup-sandbox/           ← Vite component preview server (design tool)
-├── replit.md                     ← Project memory
-├── SYSTEM_OVERVIEW.md            ← This file
-└── package.json                  ← Workspace root
-```
 
----
+## 3. Workspace Tooling
 
-## 3. Quran App (`artifacts/quran-app/`)
+| Area            | Current setup                                        |
+| --------------- | ---------------------------------------------------- |
+| Package manager | `pnpm@10.33.0`                                       |
+| Language        | TypeScript `~5.9.2`                                  |
+| Root scripts    | `pnpm run build`, `pnpm run typecheck`               |
+| Workspace mode  | Monorepo with `artifacts/*`, `lib/*`, `scripts`      |
+| Security policy | `minimumReleaseAge` enabled in `pnpm-workspace.yaml` |
 
-### 3.1 Tech Stack
+Notable workspace behavior:
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | React Native via **Expo SDK** |
-| Routing | **Expo Router** (file-based, similar to Next.js) |
-| State | React Context + `AsyncStorage` (no backend) |
-| Fonts | `@expo-google-fonts/inter` (400, 500, 600, 700) |
-| Icons | `@expo/vector-icons` (Feather set) |
-| Safe area | `react-native-safe-area-context` |
-| Blur effect | `expo-blur` (iOS tab bar) |
-| Query | `@tanstack/react-query` (available but minimal use) |
+- The root `preinstall` script enforces `pnpm` and removes `package-lock.json` / `yarn.lock`.
+- Package versions for common libraries are centralized via the workspace `catalog`.
+- The workspace uses a supply-chain delay policy through `minimumReleaseAge`.
 
-### 3.2 Directory Structure
+## 4. Primary App: `artifacts/quran-app`
 
-```
+### 4.1 Stack
+
+| Layer              | Technology                                                               |
+| ------------------ | ------------------------------------------------------------------------ |
+| Framework          | Expo SDK 54                                                              |
+| App router         | Expo Router                                                              |
+| UI runtime         | React 19.1 + React Native 0.81.5                                         |
+| Build config       | `app.json`, `eas.json`, Babel preset Expo                                |
+| State              | React Context + AsyncStorage                                             |
+| Lists              | FlashList                                                                |
+| Audio              | `expo-av`                                                                |
+| Location           | `expo-location`                                                          |
+| Notifications      | `expo-notifications`                                                     |
+| Styling            | React Native styles + gradients + blur                                   |
+| Visual effects     | `expo-linear-gradient`, `expo-blur`, `expo-glass-effect`, `expo-symbols` |
+| Fonts              | Inter via `@expo-google-fonts/inter`                                     |
+| Prayer calculation | `adhan`                                                                  |
+
+### 4.2 Current App File Structure
+
+```text
 artifacts/quran-app/
-├── app/
-│   ├── _layout.tsx              ← Root layout: fonts, providers, Stack navigator
-│   ├── (tabs)/
-│   │   ├── _layout.tsx          ← Tab bar (iOS native glass / classic cross-platform)
-│   │   └── index.tsx            ← HOME / DASHBOARD screen
-│   ├── surahs.tsx               ← Full surah list (search + Meccan/Medinan filter)
-│   ├── reader/[id].tsx          ← Surah reader (dynamic route, id = surah number)
-│   ├── bookmarks.tsx            ← Saved ayahs list
-│   ├── settings.tsx             ← App preferences
-│   └── +not-found.tsx           ← 404 fallback
-│
-├── components/
-│   ├── AyahCard.tsx             ← Single ayah display (Arabic + English + Nepali)
-│   ├── SurahCard.tsx            ← Surah list item
-│   ├── ErrorBoundary.tsx        ← React error boundary wrapper
-│   ├── ErrorFallback.tsx        ← Fallback UI for errors
-│   └── KeyboardAwareScrollViewCompat.tsx
-│
-├── context/
-│   └── QuranContext.tsx          ← Global app state (see §3.4)
-│
-├── data/
-│   ├── surahs.ts                ← Static metadata for all 114 surahs
-│   └── ayahs.ts                 ← Ayah type definition + legacy local data (unused for content)
-│
-├── hooks/
-│   ├── useTheme.ts              ← Returns current theme colors based on darkMode toggle
-│   ├── useColors.ts             ← Raw color access
-│   └── useDailyAyah.ts          ← Fetches today's rotating ayah from APIs (see §3.6)
-│
-├── services/
-│   └── quranApi.ts              ← API fetch logic + AsyncStorage caching (see §3.5)
-│
-└── constants/
-    └── colors.ts                ← Light/dark color palette tokens
+|- app/
+|  |- _layout.tsx
+|  |- +not-found.tsx
+|  |- bookmarks.tsx
+|  |- dhikr.tsx
+|  |- duas.tsx
+|  |- favorites.tsx
+|  |- hijri.tsx
+|  |- juz.tsx
+|  |- qibla.tsx
+|  |- search.tsx
+|  |- settings.tsx
+|  |- tafsir.tsx
+|  |- reader/[id].tsx
+|  `- (tabs)/
+|     |- _layout.tsx
+|     |- audio.tsx
+|     |- index.tsx
+|     |- prayer.tsx
+|     |- surahs.tsx
+|     `- utilities.tsx
+|- components/
+|- constants/
+|- context/
+|- data/
+|- hooks/
+|- services/
+|- utils/
+|- assets/
+|- package.json
+|- app.json
+`- eas.json
 ```
 
----
+## 5. Navigation Model
 
-### 3.3 Navigation
+### 5.1 Root stack
 
-```
-Stack (root)
-├── (tabs)                       ← Tab navigator (single tab: Home)
-│   └── index (Home/Dashboard)
-├── surahs                       ← Full surah list
-├── reader/[id]                  ← Ayah reader, param: surah ID (1–114)
-├── bookmarks                    ← Saved bookmarks
-└── settings                     ← User preferences
-```
+Defined in `artifacts/quran-app/app/_layout.tsx`.
 
-Navigation is handled entirely by **Expo Router**. Routes are driven by file names.
+Main stack entries:
 
----
+- `(tabs)` - main application shell
+- `duas`
+- `dhikr`
+- `hijri`
+- `tafsir`
+- `reader/[id]`
+- `bookmarks`
+- `juz`
+- `settings`
+- `qibla`
+- `favorites`
+- `search`
 
-### 3.4 Global State — `QuranContext`
+Cross-cutting wrappers at the root:
 
-All persistent state lives in `QuranContext` (no backend/database). Everything is persisted to **AsyncStorage**.
+- `SafeAreaProvider`
+- `ErrorBoundary`
+- `GestureHandlerRootView`
+- `KeyboardProvider`
+- `QuranProvider`
 
-| State field | Type | AsyncStorage key | Description |
-|-------------|------|-----------------|-------------|
-| `bookmarks` | `Bookmark[]` | `@quran_bookmarks` | Saved ayahs with Arabic text + reference |
-| `lastRead` | `LastRead \| null` | `@quran_last_read` | Most recently read surah + ayah number |
-| `readSurahIds` | `number[]` | `@quran_read_surahs` | IDs of surahs opened at least once |
-| `fontSize` | `number` | `@quran_font_size` | Arabic text size (default 26, range 20–36) |
-| `showNepali` | `boolean` | `@quran_show_nepali` | Toggle Nepali translation (default: on) |
-| `showEnglish` | `boolean` | `@quran_show_english` | Toggle English translation (default: on) |
-| `darkMode` | `boolean` | `@quran_dark_mode` | Dark mode override (default: off) |
+### 5.2 Tab layout
 
-**Exported functions:**
-- `addBookmark(bookmark)` — prepends bookmark, dedupes by ayahId
-- `removeBookmark(ayahId)` — removes by ayahId
-- `isBookmarked(ayahId)` → boolean
-- `setLastRead(lr)` — updates last read position
-- `setFontSize(size)` — persists font preference
-- `setShowNepali(bool)` / `setShowEnglish(bool)` — translation toggles
-- `toggleDarkMode()` — flips dark mode
-- `markSurahRead(surahId)` — adds to `readSurahIds` if not already present
+Defined in `artifacts/quran-app/app/(tabs)/_layout.tsx`.
 
----
+Primary tabs:
 
-### 3.5 API Service — `services/quranApi.ts`
+- `index` - home dashboard
+- `surahs` - Quran directory
+- `audio` - audio player and reciter flow
+- `prayer` - prayer times and notification controls
+- `utilities` - Islamic tools hub
 
-**Two external APIs are called in parallel** for every surah load:
+Hidden tab routes:
 
-#### API 1 — AlQuran Cloud
-```
-GET https://api.alquran.cloud/v1/surah/{id}/editions/quran-uthmani,en.sahih
-```
-Returns both Arabic (Uthmani) and English (Sahih International) in one response.
+- `favorites`
+- `qibla`
 
-#### API 2 — Quran.com
-```
-GET https://api.quran.com/api/v4/quran/translations/108?chapter_number={id}
-```
-Returns Nepali translation (ID 108, Ahl Al-Hadith Central Society of Nepal).
-- Nepali text is stripped of Devanagari number prefixes (e.g. `"१) text"` → `"text"`)
-- HTML tags are stripped from the response
+Behavior:
 
-#### Merging
-Results are merged by array index (both APIs return ayahs in order) into `Ayah` objects:
+- On supported iOS environments with liquid glass available, the app uses `unstable-native-tabs`.
+- Otherwise it falls back to a classic Expo Router `Tabs` implementation with blur on iOS and standard themed tabs elsewhere.
+
+## 6. Global State and Persistence
+
+Global app state lives in `artifacts/quran-app/context/QuranContext.tsx`.
+
+### 6.1 Persisted state
+
+| State                 | Storage key                                 | Purpose                         |
+| --------------------- | ------------------------------------------- | ------------------------------- |
+| Ayah bookmarks        | `@quran_bookmarks`                          | Saved ayahs                     |
+| Dua bookmarks         | `@dua_bookmarks`                            | Saved duas                      |
+| Last read             | `@quran_last_read`                          | Reader resume point             |
+| Font size             | `@quran_font_size`                          | Reader Arabic text sizing       |
+| UI language           | `@quran_ui_language`                        | App chrome localization         |
+| Enabled translations  | `@quran_enabled_languages`                  | Reader translation toggles      |
+| Legacy migration keys | `@quran_show_nepali`, `@quran_show_english` | Migrated into enabled languages |
+| Dark mode             | `@quran_dark_mode`                          | Manual theme override           |
+| Read surahs           | `@quran_read_surahs`                        | Progress tracking               |
+| Streak                | `@quran_streak`                             | Daily reading streak            |
+| Streak date           | `@quran_streak_date`                        | Last counted streak day         |
+| Default reciter       | `@quran_default_reciter`                    | Preferred audio reciter         |
+
+### 6.2 Current context responsibilities
+
+- Bookmark add/remove with deduplication
+- Dua bookmark add/remove
+- Continue-reading persistence
+- Enabled translation selection with migration logic
+- Manual dark mode toggle
+- Surah read/unread tracking
+- Reading streak rollover on load
+- Default reciter persistence
+- Local telemetry hooks for important user actions and failures
+
+## 7. Quran Content Architecture
+
+### 7.1 Ayah data shape
+
+Current ayah objects use a translation map:
+
 ```ts
 interface Ayah {
-  id: string;           // "surahId:ayahNumber" e.g. "2:255"
+  id: string;
   surahId: number;
   ayahNumber: number;
   arabic: string;
-  english: string;
-  nepali: string;
+  translations: Record<string, string>;
 }
 ```
 
-#### Caching (AsyncStorage)
-- **Cache key**: `@quran_surah_v2_{surahId}`
-- **TTL**: 7 days
-- On cache hit within TTL: returns immediately, no network call
-- On cache miss or expiry: fetches both APIs, merges, stores result
-- `clearSurahCache(surahId?)` — clears one or all surah caches
+### 7.2 Translation sources
 
----
+Defined in `artifacts/quran-app/services/translationSources.ts`.
 
-### 3.6 Daily Ayah Hook — `hooks/useDailyAyah.ts`
+| Language | Source                               |
+| -------- | ------------------------------------ |
+| English  | AlQuran Cloud `en.sahih`             |
+| Nepali   | Quran.com translation resource `108` |
+| Bangla   | Quran.com translation resource `161` |
 
-Fetches a different ayah each calendar day from a curated pool of 30 meaningful ayahs.
+Arabic text is also sourced through the Quran fetch layer.
 
-**Selection logic:**
-```
-dayIndex = dayOfYear % 30
-```
+### 7.3 Offline-first strategy
 
-**APIs called for the chosen ayah:**
-```
-GET https://api.alquran.cloud/v1/ayah/{verseKey}/editions/quran-uthmani,en.sahih
-GET https://api.quran.com/api/v4/verses/by_key/{verseKey}?translations=108
-```
+The app is local-first for Quran reading.
 
-**Cache key**: `@quran_daily_ayah_{year}_{month}_{day}` — one entry per calendar day, never expires (keeps that day's ayah stable).
+Current design:
 
-**Returns**: `{ ayah: DailyAyah | null, loading: boolean, error: boolean }`
+- Large bundled fallback data still exists in `data/offlineQuran.ts`
+- App code now loads bundled data through `data/offlineQuranLoader.ts`
+- The loader lazy-imports the offline Quran module instead of directly importing it into all consumers
+- Quran reading and daily ayah depend on the async loader layer
 
-The 30-ayah pool includes well-known verses: Ayat al-Kursi (2:255), 13:28 (hearts at rest), 39:53 (do not despair), 94:5–6 (ease with hardship), 112:1, etc.
+This reduces hot-path bundle pressure compared with direct static imports, while preserving the current offline fallback behavior.
 
----
+### 7.4 Quran fetch flow
 
-### 3.7 Dashboard Screen (`app/(tabs)/index.tsx`)
+Implemented in `artifacts/quran-app/services/quranApi.ts`.
 
-All sections are dynamic:
+High-level flow:
 
-| Section | Dynamic source |
-|---------|---------------|
-| Greeting (Arabic + Nepali) | Computed from current hour |
-| Continue Reading card | `lastRead` from QuranContext |
-| Stat: 114 سूराहरू | Static |
-| Stat: बुकमार्क | `bookmarks.length` from QuranContext |
-| Stat: पठिएको | `readSurahIds.length` from QuranContext |
-| Reading progress bar | `readSurahIds.length / 114 * 100%` |
-| Featured Surahs scroll | Static list of 8 IDs [1,36,55,67,97,112,113,114] |
-| आजको आयत (Daily Ayah) | `useDailyAyah()` hook — live API fetch |
+1. Resolve bundled fallback ayahs through `offlineQuranLoader`
+2. Check in-memory cache
+3. Check AsyncStorage overlay cache
+4. Fetch remote Arabic + English via AlQuran Cloud if needed
+5. Fetch remote Nepali/Bangla translations from Quran.com
+6. Merge remote data over bundled fallback
+7. Persist only overlay differences
+8. Return normalized ayahs with all configured translation keys present
 
-**Greeting mapping:**
+### 7.5 Caching model
 
-| Hour range | Nepali |
-|-----------|--------|
-| 0–4 | शुभ रात्री |
-| 5–11 | शुभ प्रभात |
-| 12–16 | शुभ दिउँसो |
-| 17–19 | शुभ साँझ |
-| 20–23 | शुभ रात्री |
+Current cache details:
 
----
+- In-memory per-surah cache
+- In-flight request deduplication
+- AsyncStorage overlay cache
+- Cache version: `4`
+- Max persisted surahs: `24`
 
-### 3.8 Reader Screen (`app/reader/[id].tsx`)
+This means the app avoids repeatedly storing entire surah payloads when bundled fallback already exists.
 
-- Accepts `id` (surah number) and optional `ayah` (ayah number for scroll) params
-- Calls `fetchSurahAyahs(surahId)` on mount
-- Shows load states: `loading` → spinner, `error` → retry button, `offline` → offline message
-- Calls `markSurahRead(surahId)` on successful load
-- Updates `lastRead` on scroll (via `onViewableItemsChanged`)
-- FlatList renders `AyahCard` per ayah
-- Basmala header is shown for all surahs except At-Tawbah (9) and Al-Fatiha (1)
-- Respects `fontSize`, `showEnglish`, `showNepali` from context
+## 8. Main User Flows
 
----
+### 8.1 Home dashboard
 
-### 3.9 Surah List Screen (`app/surahs.tsx`)
+Implemented in `artifacts/quran-app/app/(tabs)/index.tsx`.
 
-- Full list of 114 surahs via `SurahCard` component
-- Live search by English name, Nepali name, or surah number
-- Filter tabs: All / Meccan / Medinan
-- Tapping a card navigates to `reader/[id]`
+The current home screen includes:
 
----
+- Time-based localized greeting
+- Centered hero header with Bismillah
+- Hijri date chip
+- Reading streak chip
+- Search entry
+- Next prayer card with countdown
+- Continue reading card
+- Progress tracker
+- Quick access cards
+- Daily ayah card
+- Featured surahs carousel
 
-### 3.10 Bookmarks Screen (`app/bookmarks.tsx`)
+Home also prefetches likely next surahs based on last-read position and featured picks.
 
-- Lists all bookmarked ayahs from context
-- Shows Arabic text, surah/ayah reference
-- Tap to navigate to reader at that position
-- Swipe or button to remove bookmark
+### 8.2 Quran directory
 
----
+Implemented in `artifacts/quran-app/app/(tabs)/surahs.tsx`.
 
-### 3.11 Settings Screen (`app/settings.tsx`)
+Capabilities:
 
-| Setting | Type | Default |
-|---------|------|---------|
-| नेपाली अनुवाद (Ahl Al-Hadith) | Toggle | On |
-| English Translation (Sahih Int'l) | Toggle | On |
-| Arabic Font Size | Slider (20–36pt) | 26pt |
-| Dark Mode | Toggle | Off |
+- Search/filter over all surahs
+- Open reader by surah
+- Mark surahs read/unread
+- FlashList rendering for scalable scrolling
 
----
+### 8.3 Reader
 
-### 3.12 Theme & Colors (`constants/colors.ts`, `hooks/useTheme.ts`)
+Implemented in `artifacts/quran-app/app/reader/[id].tsx`.
 
-Emerald green Islamic color palette with full light/dark variants.
+Responsibilities:
 
-| Token | Light | Dark |
-|-------|-------|------|
-| `background` | `#f7f5f0` | `#0d1117` |
-| `primary` | `#1b6b3a` | `#4caf70` |
-| `card` | `#ffffff` | `#161b22` |
-| `accent` | `#c9a84c` (gold) | `#d4a843` (gold) |
-| `muted` | `#ede9e0` | `#1c2128` |
-| `border` | `#ddd8cc` | `#30363d` |
+- Load surah content through the local-first Quran API
+- Mark a surah as read
+- Persist last-read position
+- Render Arabic + enabled translations
+- Respect font size and translation preferences
+- Refresh remote text when requested
+- Support ayah playback and sequential playback
+- Integrate bookmarking
 
-`useTheme()` reads `darkMode` from `QuranContext` (user toggle), overriding the system color scheme.
+### 8.4 Audio tab
 
----
+Implemented in `artifacts/quran-app/app/(tabs)/audio.tsx`.
 
-### 3.13 Data Layer (`data/surahs.ts`, `data/ayahs.ts`)
+Current audio flow:
 
-#### `data/surahs.ts`
-Static array of all 114 surahs. Each entry:
-```ts
-interface Surah {
-  id: number;           // 1–114
-  nameArabic: string;
-  nameEnglish: string;
-  nameNepali: string;
-  meaning: string;      // English meaning
-  totalAyahs: number;
-  revelationType: "Meccan" | "Medinan";
-  juz: number;          // 1–30
-}
-```
+- Search/select surah
+- Start playback from ayah 1
+- Continue verse-by-verse playback
+- Track current ayah and playback state
+- Show reciter and transport controls
+- Persist bookmark interactions through shared state
 
-#### `data/ayahs.ts`
-Exports the `Ayah` type used across the app. The local ayah data in this file is legacy and no longer used as a content source — all ayah content comes from the APIs.
+### 8.5 Tafsir Hub
 
----
+Implemented in `artifacts/quran-app/app/tafsir.tsx`.
 
-## 4. Other Artifacts
+Current tafsir UX:
 
-### 4.1 API Server (`artifacts/api-server/`)
-- Express 5 server, port 8080, routed at `/api`
-- Drizzle ORM + PostgreSQL
-- Not used by the Quran app (Quran app is fully client-side)
+- Surah selection
+- Ayah selection grid
+- Immediate transition to tafsir reading on ayah tap
+- Fetch Ibn Kathir commentary via `tafsirService`
+- Graceful loading and retry states
 
-### 4.2 Mockup Sandbox (`artifacts/mockup-sandbox/`)
-- Vite dev server for isolated component previews
-- Used during design exploration on the canvas board
-- Not part of the production Quran app
+Formatting cleanup for HTML-derived tafsir text is handled in `artifacts/quran-app/services/tafsirService.ts`.
 
----
+### 8.6 Prayer times
 
-## 5. Workflows
+Implemented through:
 
-| Workflow | Command | Status |
-|----------|---------|--------|
-| `artifacts/quran-app: expo` | `pnpm --filter @workspace/quran-app run dev` | Running |
-| `artifacts/api-server: API Server` | `pnpm --filter @workspace/api-server run dev` | Running |
-| `artifacts/mockup-sandbox: Component Preview Server` | `pnpm --filter @workspace/mockup-sandbox run dev` | Running |
+- `app/(tabs)/prayer.tsx`
+- `hooks/usePrayerTimes.ts`
+- `services/notificationService.ts`
 
----
+Capabilities:
 
-## 6. Data Flow Diagram
+- Resolve current location
+- Compute prayer times with `adhan`
+- Show current/next prayer
+- Countdown to next prayer
+- Toggle per-prayer local notifications
+- Reschedule notification batches locally on device
 
-```
-User opens surah
-       │
-       ▼
-reader/[id].tsx
-       │
-       ▼
-fetchSurahAyahs(id)      ← services/quranApi.ts
-       │
-       ├─ AsyncStorage hit? ──YES──► return cached Ayah[]
-       │
-       NO
-       │
-       ├─ Parallel fetch:
-       │   ├─ AlQuran Cloud → Arabic + English ayahs
-       │   └─ Quran.com (ID 108) → Nepali translations
-       │
-       ▼
-  Merge into Ayah[]
-       │
-       ├─ Save to AsyncStorage (TTL 7 days)
-       │
-       ▼
-FlatList of AyahCard components
-       │
-       ├─ Arabic text (always shown)
-       ├─ English text (if showEnglish)
-       └─ Nepali text (if showNepali)
-```
+Current notification strategy:
 
----
+- Local notifications only
+- No remote push backend dependency
+- Schedules the next 7 days of enabled prayer alerts
 
-## 7. Key Design Decisions
+### 8.7 Qibla
 
-1. **No backend** — all state is AsyncStorage. Simpler, works offline, no auth needed.
-2. **Two APIs, one cache** — AlQuran Cloud (Arabic+English) and Quran.com (Nepali) are fetched in parallel and merged before caching, so subsequent loads only hit AsyncStorage.
-3. **Cache key versioning** — key prefix `@quran_surah_v2_` ensures old cached data (v1, pre-Nepali) is ignored automatically.
-4. **Daily ayah is deterministic** — same ayah all day for any user, no server needed. Rotates at midnight.
-5. **Nepali as the unique differentiator** — the only Quran app targeting Nepali speakers. Translation sourced from the only Nepali translation on Quran.com (ID 108).
-6. **Reading progress is local-only** — `readSurahIds` tracks which surahs have been opened; shown as a progress bar on the dashboard.
+Available via `app/qibla.tsx`.
+
+Responsibilities:
+
+- Determine user location
+- Compute bearing to the Kaaba
+- Use heading when available to orient UI
+
+### 8.8 Duas and dhikr
+
+Current Islamic practice content is split across:
+
+- `app/duas.tsx`
+- `app/dhikr.tsx`
+- `data/duas.ts`
+
+Capabilities:
+
+- Local curated content
+- Bookmarking
+- Copy/share interactions
+- Daily-practice oriented browsing
+
+### 8.9 Hijri
+
+Available at `app/hijri.tsx` with helper logic in `utils/hijriCalendar`.
+
+Purpose:
+
+- Show Hijri month/date context
+- Surface Islamic event labels used elsewhere in the app
+
+### 8.10 Utilities hub
+
+Implemented in `app/(tabs)/utilities.tsx`.
+
+Current utilities surface links to:
+
+- Qibla
+- Daily duas
+- Favorites/bookmarks
+- Settings
+- Hijri calendar
+- Tafsir Hub
+
+## 9. Daily Ayah
+
+Implemented in `artifacts/quran-app/hooks/useDailyAyah.ts`.
+
+Current behavior:
+
+- Uses a curated pool of ayah references
+- Selects the ayah by day-of-year modulo pool size
+- Resolves the ayah through the offline Quran loader
+- Stores the daily result in AsyncStorage
+- Returns Arabic, English, Nepali, and Bangla values when available
+
+This is local-first and no longer requires a fresh network call for normal operation.
+
+## 10. Audio Architecture
+
+Implemented through:
+
+- `services/audioService.ts`
+- `hooks/useAudio.ts`
+
+### 10.1 Current reciters
+
+- Mishary Alafasy
+- Abdul Basit
+- Ali Al-Hudhaify
+- Maher Al-Muaiqly
+
+### 10.2 Audio source strategy
+
+Primary source:
+
+- `everyayah.com`
+
+Optional backup source:
+
+- `cdn.islamic.network`
+
+### 10.3 Playback behavior
+
+- Multiple URL fallback per ayah
+- Current ayah tracking
+- Play/pause/resume/stop
+- Sequential verse progression
+- Shared reciter model across the app
+
+## 11. Theme and Localization
+
+### 11.1 Theme
+
+Current theme layers:
+
+- `constants/colors.ts`
+- `hooks/useTheme.ts`
+- `hooks/useColors.ts`
+
+Design direction remains:
+
+- Emerald/green primary palette
+- Gold secondary accent
+- Light/dark variants
+- Manual dark-mode persistence
+
+### 11.2 Localization
+
+UI copy lives in `artifacts/quran-app/services/i18n.ts`.
+
+Current UI languages:
+
+- English
+- Nepali
+- Bangla
+
+This is separate from reader translation enablement, which is controlled by `enabledLanguages`.
+
+## 12. Error Handling and Telemetry
+
+### 12.1 Error handling
+
+- App rendering is wrapped by `ErrorBoundary`
+- Reader and tafsir have visible fallback states
+- Quran fetch pipeline gracefully falls back to bundled content
+- Audio failures are surfaced in the UI instead of crashing the app
+
+### 12.2 Telemetry
+
+Defined in `artifacts/quran-app/services/telemetry.ts`.
+
+Current telemetry posture:
+
+- Local-only event/error storage
+- No remote observability backend
+- Debug-oriented instrumentation for failures and key actions
+
+## 13. Expo Build and Runtime Status
+
+### 13.1 Current config
+
+Relevant files:
+
+- `artifacts/quran-app/app.json`
+- `artifacts/quran-app/eas.json`
+
+Current Expo identity:
+
+- App name: `NurQuran`
+- Slug: `quran-app`
+- Android package: `com.nepaliquran.app`
+- iOS bundle identifier: `com.nepaliquran.app`
+- EAS project ID present
+
+### 13.2 Build profiles
+
+Current `eas.json` profiles:
+
+- `development` - internal dev client
+- `preview` - internal Android APK
+- `production` - Android app bundle
+
+### 13.3 Current build notes
+
+As of this update:
+
+- `pnpm --dir artifacts/quran-app typecheck` passes
+- `npx expo config --type public` resolves successfully
+- Expo build readiness improved after removing the `FlashList` typing blocker
+- The workspace still depends on the root `pnpm-lock.yaml`, so `package.json` and the lockfile must remain aligned for EAS frozen installs
+
+## 14. Secondary Artifacts
+
+### 14.1 API server
+
+`artifacts/api-server`
+
+Current status:
+
+- Express 5
+- TypeScript + esbuild build step
+- Uses `cors`, `cookie-parser`, `pino`, `pino-http`
+- Depends on shared DB and Zod packages
+
+This backend is currently not on the critical path for the Quran app’s reading, prayer, or bookmark flows.
+
+### 14.2 Mockup sandbox
+
+`artifacts/mockup-sandbox`
+
+Current role:
+
+- Vite + React design sandbox
+- Rich component/dev playground
+- Not part of the production Expo runtime
+
+## 15. Shared Libraries
+
+### 15.1 `lib/api-client-react`
+
+- Shared React API client package
+- Depends on TanStack Query
+
+### 15.2 `lib/api-zod`
+
+- Shared Zod schema package
+
+### 15.3 `lib/db`
+
+- Drizzle ORM + PostgreSQL shared package
+- Exposes schema and DB entry points
+
+### 15.4 `lib/api-spec`
+
+- OpenAPI source + Orval codegen entry point
+
+## 16. Current Architectural Decisions
+
+1. The Expo app is still the product center of gravity.
+2. Quran reading is local-first, with remote overlays improving bundled data.
+3. Translation support is extensible through a translation map rather than fixed language fields.
+4. User state is fully local: no auth, no cloud sync, no mandatory backend dependency.
+5. Prayer alerts are local scheduled notifications.
+6. Telemetry is local-only and primarily operational/debugging support.
+7. The route surface has expanded beyond basic reading into a broader Islamic utility app.
+
+## 17. Current Watchouts
+
+- `SYSTEM_OVERVIEW.md` should be refreshed whenever route structure changes again, especially around tabs or tools.
+- `artifacts/quran-app/data/offlineQuran.ts` remains very large and is still a significant footprint driver even though access is now routed through a lazy loader.
+- `package.json` and `pnpm-lock.yaml` must stay synchronized for EAS builds using frozen lockfiles.
+- Some files still contain mojibake/encoding artifacts in string literals or comments from earlier edits; behavior is mostly fine, but cleanup would improve maintainability.

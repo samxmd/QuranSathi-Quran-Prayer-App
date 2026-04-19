@@ -14,12 +14,14 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ## Artifacts
 
 ### Quran App (Mobile - Expo)
+
 - **Path**: `artifacts/quran-app/`
 - **Preview**: `/` (root path)
 - **Tech**: React Native + Expo Router
 - **Storage**: AsyncStorage only (no backend)
 
 #### Features
+
 - Arabic Quran text (Uthmani script) via AlQuran Cloud API
 - English translation (Sahih International) via AlQuran Cloud API
 - Nepali translation (Ahl Al-Hadith Central Society of Nepal, Quran.com ID 108) — all 114 surahs
@@ -36,11 +38,13 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - Emerald green Islamic color theme (light + dark)
 
 #### API Integration
+
 - AlQuran Cloud: `GET /surah/{id}/editions/quran-uthmani,en.sahih`
 - Quran.com: `GET /quran/translations/108?chapter_number={id}`
 - Both fetched in parallel, merged, cached (7-day TTL, key `@quran_surah_v2_{id}`)
 
 #### Key Files
+
 - `services/quranApi.ts` — API fetch + AsyncStorage cache logic
 - `context/QuranContext.tsx` — global state (bookmarks, lastRead, readSurahIds, settings)
 - `hooks/useDailyAyah.ts` — daily rotating ayah hook
@@ -51,11 +55,13 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `constants/colors.ts` — light/dark color tokens
 
 ### API Server
+
 - **Path**: `artifacts/api-server/`
 - **Port**: 8080 (routed via `/api`)
 - Not used by Quran app
 
 ### Canvas / Mockup Sandbox
+
 - **Path**: `artifacts/mockup-sandbox/`
 - **Preview**: `/__mockup`
 - Design tool only
