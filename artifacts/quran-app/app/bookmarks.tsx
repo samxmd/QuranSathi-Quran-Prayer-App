@@ -1,29 +1,35 @@
 import { router, Stack } from "expo-router";
 import React from "react";
 import {
-  FlatList,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
+import * as Haptics from "expo-haptics";
 import { useQuran } from "@/context/QuranContext";
 import { useTheme } from "@/hooks/useTheme";
-import * as Haptics from "expo-haptics";
 
 export default function BookmarksScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { bookmarks, removeBookmark } = useQuran();
+  const { bookmarks, removeBookmark, duaBookmarks, removeDuaBookmark } = useQuran();
 
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
+  const isEmpty = bookmarks.length === 0 && duaBookmarks.length === 0;
 
-  const handleRemove = async (ayahId: string) => {
+  const handleAyahRemove = async (ayahId: string) => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await removeBookmark(ayahId);
+  };
+
+  const handleDuaRemove = async (id: string) => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await removeDuaBookmark(id);
   };
 
   return (
@@ -32,66 +38,97 @@ export default function BookmarksScreen() {
         options={{
           title: "Bookmarks",
           headerStyle: { backgroundColor: theme.background },
-          headerTintColor: theme.foreground,
+          headerTintColor: theme.textPrimary,
           headerShadowVisible: false,
         }}
       />
 
-      {bookmarks.length === 0 ? (
+      {isEmpty ? (
         <View style={styles.empty}>
-          <Feather name="bookmark" size={48} color={theme.mutedForeground} />
-          <Text style={[styles.emptyTitle, { color: theme.foreground }]}>No bookmarks yet</Text>
-          <Text style={[styles.emptyText, { color: theme.mutedForeground }]}>
-            Tap the bookmark icon on any ayah to save it here for quick access.
+          <Feather name="bookmark" size={48} color={theme.textSecondary} />
+          <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>No bookmarks yet</Text>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+            Save ayahs from the reader or duas from the new Dua tab to keep them close.
           </Text>
           <TouchableOpacity
-            style={[styles.browseBtn, { backgroundColor: theme.primary }]}
+            style={[styles.primaryBtn, { backgroundColor: theme.primary }]}
             onPress={() => router.push("/surahs")}
             activeOpacity={0.85}
           >
-            <Text style={[styles.browseBtnText, { color: theme.primaryForeground }]}>
-              Browse Surahs
+            <Text style={[styles.primaryBtnText, { color: theme.primaryForeground }]}>
+              Browse Quran
             </Text>
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
-          data={bookmarks}
-          keyExtractor={(item) => item.ayahId}
-          contentContainerStyle={{ paddingTop: 12, paddingBottom: bottomInset + 20 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
-              onPress={() =>
-                router.push({
-                  pathname: "/reader/[id]",
-                  params: { id: item.surahId, ayah: item.ayahNumber },
-                })
-              }
-              activeOpacity={0.8}
-            >
-              <View style={styles.cardHeader}>
-                <View>
-                  <Text style={[styles.surahName, { color: theme.primary }]}>{item.surahName}</Text>
-                  <Text style={[styles.ayahRef, { color: theme.mutedForeground }]}>
-                    Ayah {item.ayahNumber}
+        <ScrollView
+          contentContainerStyle={{ paddingTop: 12, paddingBottom: bottomInset + 24 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {bookmarks.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Quran Ayahs</Text>
+              {bookmarks.map((item) => (
+                <TouchableOpacity
+                  key={item.ayahId}
+                  style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/reader/[id]",
+                      params: { id: item.surahId, ayah: item.ayahNumber },
+                    })
+                  }
+                  activeOpacity={0.82}
+                >
+                  <View style={styles.cardHeader}>
+                    <View>
+                      <Text style={[styles.cardTitle, { color: theme.primary }]}>{item.surahName}</Text>
+                      <Text style={[styles.cardMeta, { color: theme.textSecondary }]}>
+                        Ayah {item.ayahNumber}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => handleAyahRemove(item.ayahId)} style={styles.removeBtn}>
+                      <Feather name="trash-2" size={18} color={theme.destructive} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={[styles.arabic, { color: theme.textPrimary }]} numberOfLines={2}>
+                    {item.arabic}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {duaBookmarks.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Saved Duas</Text>
+              {duaBookmarks.map((item) => (
+                <View
+                  key={item.id}
+                  style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+                >
+                  <View style={styles.cardHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.cardTitle, { color: theme.primary }]}>{item.title}</Text>
+                      <Text style={[styles.cardMeta, { color: theme.textSecondary }]}>
+                        {item.categoryName} • {item.source}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => handleDuaRemove(item.id)} style={styles.removeBtn}>
+                      <Feather name="trash-2" size={18} color={theme.destructive} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={[styles.arabic, { color: theme.textPrimary }]} numberOfLines={2}>
+                    {item.arabic}
+                  </Text>
+                  <Text style={[styles.translation, { color: theme.textPrimary }]} numberOfLines={3}>
+                    {item.english}
                   </Text>
                 </View>
-                <TouchableOpacity
-                  onPress={() => handleRemove(item.ayahId)}
-                  style={styles.removeBtn}
-                >
-                  <Feather name="trash-2" size={18} color={theme.destructive} />
-                </TouchableOpacity>
-              </View>
-              <Text style={[styles.arabic, { color: theme.arabicText }]} numberOfLines={2}>
-                {item.arabic}
-              </Text>
-            </TouchableOpacity>
+              ))}
+            </View>
           )}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={!!bookmarks.length}
-        />
+        </ScrollView>
       )}
     </View>
   );
@@ -105,7 +142,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 40,
+    paddingHorizontal: 36,
     gap: 12,
   },
   emptyTitle: {
@@ -119,15 +156,25 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 24,
   },
-  browseBtn: {
-    marginTop: 16,
-    paddingHorizontal: 28,
-    paddingVertical: 12,
+  primaryBtn: {
+    width: "100%",
+    paddingVertical: 13,
     borderRadius: 12,
+    alignItems: "center",
+    marginTop: 8,
   },
-  browseBtnText: {
+  primaryBtnText: {
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
+  },
+  section: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    marginHorizontal: 16,
+    marginBottom: 12,
   },
   card: {
     marginHorizontal: 16,
@@ -140,13 +187,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
+    gap: 10,
     marginBottom: 10,
   },
-  surahName: {
+  cardTitle: {
     fontSize: 16,
     fontFamily: "Inter_600SemiBold",
   },
-  ayahRef: {
+  cardMeta: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     marginTop: 2,
@@ -159,5 +207,12 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     textAlign: "right",
     lineHeight: 34,
+    writingDirection: "rtl",
+  },
+  translation: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 22,
+    marginTop: 12,
   },
 });

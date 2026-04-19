@@ -1,25 +1,12 @@
 import { BlurView } from "expo-blur";
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
-import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
-import { SymbolView } from "expo-symbols";
-import { Feather } from "@expo/vector-icons";
+import Feather from "@expo/vector-icons/Feather";
 import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+
 import { useTheme } from "@/hooks/useTheme";
 
-function NativeTabLayout() {
-  return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>Home</Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
-  );
-}
-
-function ClassicTabLayout() {
+export default function TabLayout() {
   const theme = useTheme();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -30,52 +17,100 @@ function ClassicTabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: theme.primary,
-        tabBarInactiveTintColor: theme.mutedForeground,
+        tabBarInactiveTintColor: theme.textSecondary,
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : theme.background,
-          borderTopWidth: isWeb ? 1 : 0,
-          borderTopColor: theme.border,
+          backgroundColor: isIOS ? "transparent" : theme.cardBackground,
+          borderTopWidth: 0,
           elevation: 0,
-          ...(isWeb ? { height: 84 } : {}),
+          height: isWeb ? 84 : isIOS ? 90 : 80,
+          paddingBottom: isIOS ? 34 : 16,
+          paddingTop: 8,
+          ...(isWeb ? {} : {
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: -2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 10,
+          }),
         },
+        tabBarItemStyle: {
+          borderRadius: 20,
+          marginHorizontal: 10,
+          height: 52,
+        },
+        tabBarActiveBackgroundColor: theme.isDark ? `${theme.primary}22` : theme.cardBackground,
         tabBarBackground: () =>
           isIOS ? (
             <BlurView
-              intensity={100}
+              intensity={80}
               tint={isDark ? "dark" : "light"}
               style={StyleSheet.absoluteFill}
             />
-          ) : isWeb ? (
+          ) : !isWeb ? (
             <View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: theme.background },
+                { 
+                  backgroundColor: theme.cardBackground,
+                  borderTopWidth: 1,
+                  borderTopColor: theme.border + "40",
+                },
               ]}
             />
           ) : null,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontFamily: "Inter_600SemiBold",
+          marginTop: 2,
+        },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="house" tintColor={color} size={24} />
-            ) : (
-              <Feather name="home" size={22} color={color} />
-            ),
+          tabBarIcon: ({ color }) => (
+            <Feather name="home" size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="surahs"
+        options={{
+          title: "Quran",
+          tabBarIcon: ({ color }) => (
+            <Feather name="book-open" size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="audio"
+        options={{
+          title: "Audio",
+          tabBarIcon: ({ color }) => (
+            <Feather name="headphones" size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="prayer"
+        options={{
+          title: "Prayer",
+          tabBarIcon: ({ color }) => (
+            <Feather name="moon" size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="utilities"
+        options={{
+          title: "Utilities",
+          tabBarIcon: ({ color }) => (
+            <Feather name="grid" size={22} color={color} />
+          ),
         }}
       />
     </Tabs>
   );
-}
-
-export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
-  return <ClassicTabLayout />;
 }

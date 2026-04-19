@@ -5,30 +5,51 @@ import {
   Inter_700Bold,
   useFonts,
 } from "@expo-google-fonts/inter";
-import { Feather } from "@expo/vector-icons";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import Feather from "@expo/vector-icons/Feather";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
+import { Platform } from "react-native";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { QuranProvider } from "@/context/QuranContext";
+import { QuranProvider, useQuran } from "@/context/QuranContext";
+import { trackError } from "@/services/telemetry";
+import { LoadingScreen } from "@/components/LoadingScreen";
+import { OnboardingScreen } from "@/components/OnboardingScreen";
 
-SplashScreen.preventAutoHideAsync();
-
-const queryClient = new QueryClient();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function RootLayoutNav() {
+  const { isLoading, hasSetLanguage } = useQuran();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (!hasSetLanguage) {
+    return <OnboardingScreen />;
+  }
+
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
+    <Stack screenOptions={{ 
+      headerBackTitle: "Back",
+      animation: Platform.OS === "web" ? "fade" : "default"
+    }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="surahs" />
+      <Stack.Screen name="duas" options={{ headerShown: false }} />
+      <Stack.Screen name="dhikr" options={{ headerShown: false }} />
+      <Stack.Screen name="hijri" options={{ headerShown: false }} />
+      <Stack.Screen name="tafsir" options={{ headerShown: false }} />
       <Stack.Screen name="reader/[id]" />
       <Stack.Screen name="bookmarks" />
+      <Stack.Screen name="juz" />
       <Stack.Screen name="settings" />
+      <Stack.Screen name="qibla" options={{ headerShown: false }} />
+      <Stack.Screen name="favorites" options={{ headerShown: false }} />
+      <Stack.Screen name="search" />
     </Stack>
   );
 }
@@ -44,7 +65,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => {});
     }
   }, [fontsLoaded, fontError]);
 
@@ -52,16 +73,15 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView>
-            <KeyboardProvider>
-              <QuranProvider>
-                <RootLayoutNav />
-              </QuranProvider>
-            </KeyboardProvider>
-          </GestureHandlerRootView>
-        </QueryClientProvider>
+      <StatusBar style="light" />
+      <ErrorBoundary onError={(error, stackTrace) => {
+        trackError("app.render_error", error, { stackTrace }).catch(() => {});
+      }}>
+        <GestureHandlerRootView>
+          <QuranProvider>
+            <RootLayoutNav />
+          </QuranProvider>
+        </GestureHandlerRootView>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

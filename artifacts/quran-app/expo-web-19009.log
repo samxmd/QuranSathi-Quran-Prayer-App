@@ -1,0 +1,16 @@
+Starting project at D:\Quran-Nepali-English\artifacts\quran-app
+React Compiler enabled
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:19009
+Logs for your project will appear below.
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓░░░░░░░░░░░░░░ 16.0% ( 4/10)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓░░░░░░░░░░░░ 31.2% (105/203)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 44.6% (250/464)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 45.2% (533/793)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 73.2% (831/971)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 82.0% (1095/1223)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 98.1% (1420/1434)
+Web Bundled 23904ms node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js (1441 modules)
+ LOG  [web] Logs will appear in the browser console
+^C

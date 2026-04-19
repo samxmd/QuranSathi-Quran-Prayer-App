@@ -1,0 +1,71 @@
+Starting project at D:\Quran-Nepali-English\artifacts\quran-app
+React Compiler enabled
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:19007
+Logs for your project will appear below.
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓░░░░░░░░░░░░░░ 16.0% ( 4/10)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓▓▓░░░░░░░░░░ 42.3% ( 54/215)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓▓▓░░░░░░░░░░ 42.3% (222/401)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 45.4% (511/765)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 69.3% (735/886)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 80.1% ( 941/1067)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 86.5% (1188/1277)
+Web Bundling failed 25876ms node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js (1440 modules)
+ ERROR  Error: Cannot find module '../lightningcss.win32-x64-msvc.node'
+Require stack:
+- D:\Quran-Nepali-English\node_modules\.pnpm\lightningcss@1.31.1\node_modules\lightningcss\node\index.js
+- D:\Quran-Nepali-English\node_modules\.pnpm\@expo+metro-config@54.0.14_expo@54.0.33\node_modules\@expo\metro-config\build\transform-worker\css-modules.js
+- D:\Quran-Nepali-English\node_modules\.pnpm\@expo+metro-config@54.0.14_expo@54.0.33\node_modules\@expo\metro-config\build\transform-worker\transform-worker.js
+- D:\Quran-Nepali-English\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\DeltaBundler\Worker.flow.js
+- D:\Quran-Nepali-English\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\DeltaBundler\Worker.js
+- D:\Quran-Nepali-English\node_modules\.pnpm\jest-worker@29.7.0\node_modules\jest-worker\build\workers\processChild.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (D:\Quran-Nepali-English\node_modules\.pnpm\lightningcss@1.31.1\node_modules\lightningcss\node\index.js:22:22)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+    at Function._load (node:internal/modules/cjs/loader:1108:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at transformCssModuleWeb (D:\Quran-Nepali-English\node_modules\.pnpm\@expo+metro-config@54.0.14_expo@54.0.33\node_modules\@expo\metro-config\build\transform-worker\css-modules.js:16:27)
+    at transformCss (D:\Quran-Nepali-English\node_modules\.pnpm\@expo+metro-config@54.0.14_expo@54.0.33\node_modules\@expo\metro-config\build\transform-worker\transform-worker.js:208:71)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundling failed 980ms node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js (1306 modules)
+ ERROR  Error: Cannot find module '../lightningcss.win32-x64-msvc.node'
+Require stack:
+- D:\Quran-Nepali-English\node_modules\.pnpm\lightningcss@1.31.1\node_modules\lightningcss\node\index.js
+- D:\Quran-Nepali-English\node_modules\.pnpm\@expo+metro-config@54.0.14_expo@54.0.33\node_modules\@expo\metro-config\build\transform-worker\css-modules.js
+- D:\Quran-Nepali-English\node_modules\.pnpm\@expo+metro-config@54.0.14_expo@54.0.33\node_modules\@expo\metro-config\build\transform-worker\transform-worker.js
+- D:\Quran-Nepali-English\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\DeltaBundler\Worker.flow.js
+- D:\Quran-Nepali-English\node_modules\.pnpm\metro@0.83.3\node_modules\metro\src\DeltaBundler\Worker.js
+- D:\Quran-Nepali-English\node_modules\.pnpm\jest-worker@29.7.0\node_modules\jest-worker\build\workers\processChild.js
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1225:15)
+    at Function._load (node:internal/modules/cjs/loader:1055:27)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at Object.<anonymous> (D:\Quran-Nepali-English\node_modules\.pnpm\lightningcss@1.31.1\node_modules\lightningcss\node\index.js:22:22)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    at Object..js (node:internal/modules/cjs/loader:1706:10)
+    at Module.load (node:internal/modules/cjs/loader:1289:32)
+    at Function._load (node:internal/modules/cjs/loader:1108:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)
+    at Module.require (node:internal/modules/cjs/loader:1311:12)
+    at require (node:internal/modules/helpers:136:16)
+    at transformCssModuleWeb (D:\Quran-Nepali-English\node_modules\.pnpm\@expo+metro-config@54.0.14_expo@54.0.33\node_modules\@expo\metro-config\build\transform-worker\css-modules.js:16:27)
+    at transformCss (D:\Quran-Nepali-English\node_modules\.pnpm\@expo+metro-config@54.0.14_expo@54.0.33\node_modules\@expo\metro-config\build\transform-worker\transform-worker.js:208:71)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Web node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 2144ms node_modules\.pnpm\expo-router@6.0.23_@types+r_abd38177f532ddff11e5834956475527\node_modules\expo-router\entry.js (1441 modules)
+ LOG  [web] Logs will appear in the browser console

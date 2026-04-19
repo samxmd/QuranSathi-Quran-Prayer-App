@@ -1,8 +1,12 @@
 {
   "expo": {
-    "name": "Quran Nepal",
-    "slug": "quran-app",
+    "name": "QuranSathi",
+    "slug": "quransathi",
     "version": "1.0.0",
+    "updates": {
+      "enabled": false,
+      "checkAutomatically": "NEVER"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "quran-app",
@@ -11,28 +15,69 @@
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1b6b3a"
+      "backgroundColor": "#003D29"
     },
     "ios": {
-      "supportsTablet": false
+      "jsEngine": "hermes",
+      "supportsTablet": false,
+      "bundleIdentifier": "com.quransathi.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "NurQuran uses your location to show prayer times and Qibla direction.",
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
     },
-    "android": {},
+    "android": {
+      "jsEngine": "hermes",
+      "package": "com.quransathi.app",
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "POST_NOTIFICATIONS"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#003D29"
+      }
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
     "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-web-browser",
       [
-        "expo-router",
+        "expo-location",
         {
-          "origin": "https://replit.com/"
+          "locationWhenInUsePermission": "NurQuran uses your location to show prayer times and Qibla direction."
         }
       ],
-      "expo-font",
-      "expo-web-browser"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#003D29"
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true
+        }
+      ],
+      "expo-sqlite",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "dc8d0ff8-809e-4432-af5a-66a994f37ff1"
+      }
     }
   }
 }
