@@ -157,20 +157,20 @@ export function useAudio(initialReciter: Reciter = DEFAULT_RECITER): UseAudioRet
           // Wait for player to be ready or fail
           await new Promise<void>((resolve, reject) => {
             const sub = player.addListener("playbackStatusUpdate", (s: any) => {
-              if (s.playbackState === "readyToPlay") {
+              if (s.playbackState === "readyToPlay" || s.playbackState === "playing" || s.playbackState === "buffering") {
+                // If it's buffering, it's at least loading successfully from this URL
                 sub.remove();
                 resolve();
               } else if (s.playbackState === "error") {
                 sub.remove();
-                reject(new Error("Playback error"));
+                reject(new Error(`Playback error: ${s.error?.message || "Unknown"}`));
               }
             });
             
-            // Timeout safety for network hangs
-            setTimeout(() => {
-                sub.remove();
-                reject(new Error("Timeout"));
-            }, 8000);
+            const timeout = setTimeout(() => {
+              sub.remove();
+              reject(new Error("Audio loading timed out (25s). Check your connection."));
+            }, 25000);
           });
 
           if (requestId !== activeRequestIdRef.current) {

@@ -110,19 +110,24 @@ export function QuranProvider({ children }: { children: React.ReactNode }) {
   const [hasSetLanguage, setHasSetLanguage] = useState<boolean>(true);
 
   useEffect(() => {
-    // Safety timeout: Never let the app hang on loading for more than 2s
+    // We want a minimum loading time of 3s to show the beautiful entrance animation
+    const minimumLoadingTime = new Promise((resolve) => setTimeout(resolve, 3000));
+    
+    // Safety timeout: Never let the app hang on loading for more than 8s
     const safetyTimeout = setTimeout(() => {
       setIsLoading(false);
-    }, 2000);
+    }, 8000);
 
-    loadData().then(() => {
-      clearTimeout(safetyTimeout);
-      setIsLoading(false);
-    }).catch((err) => {
-      console.error("Failed to load global data:", err);
-      clearTimeout(safetyTimeout);
-      setIsLoading(false);
-    });
+    Promise.all([loadData(), minimumLoadingTime])
+      .then(() => {
+        clearTimeout(safetyTimeout);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load global data:", err);
+        clearTimeout(safetyTimeout);
+        setIsLoading(false);
+      });
   }, []);
 
   async function loadData() {

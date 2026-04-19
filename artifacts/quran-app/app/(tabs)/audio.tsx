@@ -196,9 +196,15 @@ export default function AudioScreen() {
       const player = createAudioPlayer(url);
       player.playbackRate = speedRef.current;
       
-      player.addListener("playbackStatusUpdate", (ps) => {
-        if (ps.playbackState === "readyToPlay") {
+      player.addListener("playbackStatusUpdate", (ps: any) => {
+        if (ps.playbackState === "readyToPlay" || ps.playbackState === "playing") {
           setStatus((prev) => prev === "loading" ? "playing" : prev);
+        } else if (ps.playbackState === "buffering") {
+          // Keep loading status or show something else, but don't exit
+        } else if (ps.playbackState === "error") {
+          console.error("[AudioScreen] Playback error:", ps.error);
+          setStatus("idle");
+          setCurrentSurahId(null);
         } else if (ps.playbackState === "finished") {
           const sid = currentSurahIdRef.current ?? surahId;
           const aid = currentAyahRef.current;

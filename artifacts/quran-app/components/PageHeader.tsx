@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 36,
     borderBottomRightRadius: 36,
     overflow: "hidden",
-    marginBottom: 12,
+    marginBottom: 16,
     gap: 0,
     alignItems: "center",
   },

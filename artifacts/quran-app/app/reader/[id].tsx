@@ -523,7 +523,8 @@ const styles = StyleSheet.create({
   reciterHeaderBtn: { marginRight: 8, padding: 4 },
   surahHeader: {
     padding: 28,
-    paddingBottom: 20,
+    paddingBottom: 24,
+    marginBottom: 16,
     alignItems: "center",
     gap: 6,
     overflow: "hidden",
