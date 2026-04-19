@@ -6,12 +6,12 @@ import {
   View,
   Dimensions,
   Image,
-  ImageBackground,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@/hooks/useTheme";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 
 export function LoadingScreen() {
   const theme = useTheme();
@@ -33,7 +33,7 @@ export function LoadingScreen() {
       Animated.timing(shimmerAnim, {
         toValue: 1,
         duration: 2000,
-        useNativeDriver: false, // width/position animation
+        useNativeDriver: false, 
       })
     ).start();
 
@@ -51,85 +51,109 @@ export function LoadingScreen() {
     outputRange: [-width * 0.4, width * 0.4],
   });
 
+  // Create a code-based pattern grid
+  const renderPattern = () => {
+    const icons = [];
+    const ICON_SIZE = 40;
+    const cols = Math.ceil(width / ICON_SIZE) + 1;
+    const rows = Math.ceil(height / ICON_SIZE) + 1;
+    
+    for (let i = 0; i < cols * rows; i++) {
+      icons.push(
+        <MaterialCommunityIcons 
+          key={i} 
+          name="star-eight-pointed" 
+          size={20} 
+          color="rgba(255,255,255,0.04)" 
+          style={{ margin: 10 }}
+        />
+      );
+    }
+    return icons;
+  };
+
   return (
     <View style={styles.container}>
-      <ImageBackground
-        source={require("../assets/images/pattern.png")}
-        style={styles.bg}
-        imageStyle={styles.bgImage}
+      <View style={styles.patternContainer}>
+        {renderPattern()}
+      </View>
+      
+      <LinearGradient
+        colors={["rgba(14, 46, 28, 0.95)", "rgba(10, 30, 20, 0.98)"]}
+        style={styles.overlay}
       >
-        <LinearGradient
-          colors={["rgba(14, 46, 28, 0.95)", "rgba(10, 30, 20, 0.98)"]}
-          style={styles.overlay}
-        >
-          <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-            {/* Top Bismillah */}
-            <Text style={styles.bismillah}>بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</Text>
+        <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+          {/* Top Bismillah */}
+          <Text style={styles.bismillah}>بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</Text>
 
-            <View style={styles.centerContainer}>
-              {/* Central Logo Badge */}
-              <View style={styles.logoRing}>
-                <View style={[styles.logoCircle, { borderColor: theme.accent }]}>
-                  <Image
-                    source={require("../assets/images/icon.png")}
-                    style={styles.logoImage}
-                    resizeMode="contain"
-                  />
-                </View>
-              </View>
-
-              {/* Branding */}
-              <View style={styles.branding}>
-                <Text style={styles.brandTitle}>QuranSathi</Text>
-                <Text style={[styles.brandTagline, { color: theme.accent }]}>YOUR QURAN COMPANION</Text>
-              </View>
-
-              {/* Shimmer Loader */}
-              <View style={styles.loaderWrap}>
-                <View style={[styles.loaderTrack, { backgroundColor: "rgba(255,255,255,0.1)" }]}>
-                  <Animated.View
-                    style={[
-                      styles.shimmer,
-                      {
-                        backgroundColor: theme.accent,
-                        transform: [{ translateX: shimmerTranslate }],
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-
-              {/* Pulsing Dots */}
-              <View style={styles.dotsRow}>
-                {[0, 1, 2].map((i) => (
-                  <Animated.View
-                    key={i}
-                    style={[
-                      styles.dot,
-                      {
-                        backgroundColor: theme.accent,
-                        opacity: dotsAnim,
-                        transform: [{ scale: dotsAnim }],
-                      },
-                    ]}
-                  />
-                ))}
+          <View style={styles.centerContainer}>
+            {/* Central Logo Badge */}
+            <View style={styles.logoRing}>
+              <View style={[styles.logoCircle, { borderColor: theme.accent }]}>
+                <Image
+                  source={require("../assets/images/icon.png")}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
               </View>
             </View>
 
-            {/* Version Footer */}
-            <Text style={styles.version}>v1.0.0</Text>
-          </Animated.View>
-        </LinearGradient>
-      </ImageBackground>
+            {/* Branding */}
+            <View style={styles.branding}>
+              <Text style={styles.brandTitle}>QuranSathi</Text>
+              <Text style={[styles.brandTagline, { color: theme.accent }]}>YOUR QURAN COMPANION</Text>
+            </View>
+
+            {/* Shimmer Loader */}
+            <View style={styles.loaderWrap}>
+              <View style={[styles.loaderTrack, { backgroundColor: "rgba(255,255,255,0.1)" }]}>
+                <Animated.View
+                  style={[
+                    styles.shimmer,
+                    {
+                      backgroundColor: theme.accent,
+                      transform: [{ translateX: shimmerTranslate }],
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+
+            {/* Pulsing Dots */}
+            <View style={styles.dotsRow}>
+              {[0, 1, 2].map((i) => (
+                <Animated.View
+                  key={i}
+                  style={[
+                    styles.dot,
+                    {
+                      backgroundColor: theme.accent,
+                      opacity: dotsAnim,
+                      transform: [{ scale: dotsAnim }],
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+
+          {/* Version Footer */}
+          <Text style={styles.version}>v1.0.0</Text>
+        </Animated.View>
+      </LinearGradient>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0E2E1C" },
-  bg: { flex: 1 },
-  bgImage: { opacity: 0.15, resizeMode: "repeat" },
+  patternContainer: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    opacity: 0.8,
+  },
   overlay: { flex: 1, alignItems: "center", justifyContent: "space-between", paddingVertical: 60 },
   content: { flex: 1, alignItems: "center", justifyContent: "space-between", width: "100%" },
   bismillah: {
