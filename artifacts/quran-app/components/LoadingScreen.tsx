@@ -6,6 +6,7 @@ import {
   View,
   Dimensions,
   Image,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
@@ -19,13 +20,14 @@ export function LoadingScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const shimmerAnim = useRef(new Animated.Value(-1)).current;
   const dotsAnim = useRef(new Animated.Value(0)).current;
+  const useNativeDriver = Platform.OS !== "web";
 
   useEffect(() => {
     // Entrance animations
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 1000,
-      useNativeDriver: true,
+      useNativeDriver,
     }).start();
 
     // Shimmer loop
@@ -40,11 +42,11 @@ export function LoadingScreen() {
     // Pulsing dots loop
     Animated.loop(
       Animated.sequence([
-        Animated.timing(dotsAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(dotsAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        Animated.timing(dotsAnim, { toValue: 1, duration: 800, useNativeDriver }),
+        Animated.timing(dotsAnim, { toValue: 0.3, duration: 800, useNativeDriver }),
       ])
     ).start();
-  }, []);
+  }, [dotsAnim, fadeAnim, shimmerAnim, useNativeDriver]);
 
   const shimmerTranslate = shimmerAnim.interpolate({
     inputRange: [-1, 1],

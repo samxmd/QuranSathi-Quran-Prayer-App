@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/hooks/useTheme";
+import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 
 // ─── Animated Press Card ─────────────────────────────────────────────────────
@@ -43,11 +44,7 @@ function ToolCard({
   const scale = useRef(new Animated.Value(1)).current;
 
   const press = () => {
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 0.96, duration: 70, useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 1, duration: 130, useNativeDriver: true }),
-    ]).start();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     router.push(route as any);
   };
 
@@ -61,11 +58,11 @@ function ToolCard({
 
   if (wide) {
     return (
-      <TouchableOpacity activeOpacity={0.85} onPress={press} style={{ flex: 1 }}>
-        <Animated.View
+      <TouchableOpacity activeOpacity={1} onPress={press} style={{ flex: 1 }}>
+        <View
           style={[
             styles.wideCard,
-            { backgroundColor: theme.cardBackground, borderColor: theme.border, transform: [{ scale }] },
+            { backgroundColor: theme.cardBackground, borderColor: theme.border },
           ]}
         >
           <View style={[styles.wideIconWrap, { backgroundColor: bg }]}>
@@ -78,17 +75,17 @@ function ToolCard({
           <View style={[styles.chevronBox, { backgroundColor: theme.cardBackground }]}>
             <Feather name="chevron-right" size={14} color={theme.primary} />
           </View>
-        </Animated.View>
+        </View>
       </TouchableOpacity>
     );
   }
 
   return (
-    <TouchableOpacity activeOpacity={0.85} onPress={press} style={styles.tileOuter}>
-      <Animated.View
+    <TouchableOpacity activeOpacity={1} onPress={press} style={styles.tileOuter}>
+      <View
         style={[
           styles.tileCard,
-          { backgroundColor: theme.cardBackground, borderColor: theme.border, transform: [{ scale }] },
+          { backgroundColor: theme.cardBackground, borderColor: theme.border },
         ]}
       >
         <View style={[styles.tileIconWrap, { backgroundColor: bg }]}>
@@ -96,7 +93,7 @@ function ToolCard({
         </View>
         <Text style={[styles.tileTitle, { color: theme.textPrimary }]}>{title}</Text>
         <Text style={[styles.tileSub, { color: theme.textSecondary }]}>{subtitle}</Text>
-      </Animated.View>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -128,6 +125,7 @@ export default function UtilitiesScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Platform.OS === "web" ? 20 : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
+  const { t } = useTranslation();
 
   const gradColors: [string, string] = theme.isDark
     ? [theme.gradientStart, theme.gradientEnd]
@@ -140,21 +138,21 @@ export default function UtilitiesScreen() {
       showsVerticalScrollIndicator={false}
     >
       <PageHeader
-        title="Islamic Utilities"
+        title={t("tabUtilities")}
         arabicTitle="الأدوات الإسلامية"
-        subtitle="Essential tools for your daily worship &amp; practice"
+        subtitle={t("exploreTools")}
       />
 
       {/* ── TOP TILE GRID (2×2) ─────────────────────────────────────── */}
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
           <View style={[styles.sectionDot, { backgroundColor: theme.accent }]} />
-          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Quick Access</Text>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t("quickAccess")}</Text>
         </View>
 
         <View style={styles.tileGrid}>
           <ToolCard
-            title="Qibla"
+            title={t("qibla")}
             subtitle="Find direction"
             icon="compass-outline"
             library="MCI"
@@ -164,17 +162,17 @@ export default function UtilitiesScreen() {
             theme={theme}
           />
           <ToolCard
-            title="Daily Duas"
-            subtitle="Adhkar & Supplications"
-            icon="hands"
-            library="FA5"
+            title={t("dhikr")}
+            subtitle="Tasbih counter"
+            icon="dots-horizontal-circle-outline"
+            library="MCI"
             color={theme.accent}
             bg={theme.accent + "20"}
-            route="/duas"
+            route="/dhikr"
             theme={theme}
           />
           <ToolCard
-            title="Bookmarks"
+            title={t("bookmarks")}
             subtitle="Saved ayahs"
             icon="bookmark-check-outline"
             library="MCI"
@@ -184,7 +182,7 @@ export default function UtilitiesScreen() {
             theme={theme}
           />
           <ToolCard
-            title="Settings"
+            title={t("settings")}
             subtitle="App preferences"
             icon="cog-outline"
             library="MCI"
@@ -205,7 +203,7 @@ export default function UtilitiesScreen() {
 
         <View style={styles.wideList}>
           <ToolCard
-            title="Qibla Finder"
+            title={t("qiblaCompass")}
             subtitle="Live compass pointing toward the Kaaba in Makkah"
             icon="compass-outline"
             library="MCI"
@@ -216,7 +214,18 @@ export default function UtilitiesScreen() {
             wide
           />
           <ToolCard
-            title="Daily Duas & Adhkar"
+            title={t("dhikr")}
+            subtitle="Count tasbih with saved presets and progress"
+            icon="dots-horizontal-circle-outline"
+            library="MCI"
+            color={theme.accent}
+            bg={theme.accent + "20"}
+            route="/dhikr"
+            theme={theme}
+            wide
+          />
+          <ToolCard
+            title={t("dailyDhikr")}
             subtitle="Morning, evening and occasion-based supplications"
             icon="hands"
             library="FA5"
@@ -227,18 +236,18 @@ export default function UtilitiesScreen() {
             wide
           />
           <ToolCard
-            title="Dhikr Counter"
-            subtitle="Digital tasbih with presets and vibration feedback"
-            icon="dots-horizontal-circle-outline"
+            title={t("readingPlan")}
+            subtitle="Set goals (30, 60, 365 days) and track daily khatm progress"
+            icon="book-open-outline"
             library="MCI"
-            color="#6A1B9A"
-            bg={theme.isDark ? "#3B1466" : "#F3E5F5"}
-            route="/dhikr"
+            color={theme.primary}
+            bg={theme.cardBackground}
+            route="/planner"
             theme={theme}
             wide
           />
           <ToolCard
-            title="Saved Verses"
+            title={t("bookmarks")}
             subtitle="All your bookmarked ayahs in one place"
             icon="bookmark-check-outline"
             library="MCI"
@@ -270,7 +279,7 @@ export default function UtilitiesScreen() {
             wide
           />
           <ToolCard
-            title="Tafsir Hub"
+            title={t("tafsirHub")}
             subtitle="Browse Ibn Kathir commentary for every ayah in the Quran"
             icon="book-open-page-variant"
             library="MCI"

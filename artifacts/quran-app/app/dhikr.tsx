@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Platform,
@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "expo-haptics";
+import Svg, { Circle } from "react-native-svg";
 import { useTheme } from "@/hooks/useTheme";
 import { PageHeader } from "@/components/PageHeader";
 
@@ -78,16 +79,6 @@ const PRESETS = [
     bg: "#FFEBEE",
     darkBg: "#4A0A0A",
   },
-  {
-    id: "custom",
-    arabic: "ذِكْر",
-    label: "Custom",
-    meaning: "Set your own target",
-    target: 33,
-    color: "#37474F",
-    bg: "#ECEFF1",
-    darkBg: "#1C2B33",
-  },
 ];
 
 export default function DhikrScreen() {
@@ -99,13 +90,22 @@ export default function DhikrScreen() {
   const [count, setCount] = useState(0);
   const [sessions, setSessions] = useState(0);
   const [showOverlay, setShowOverlay] = useState(false);
+  const [canContinue, setCanContinue] = useState(false);
 
   const scale = useRef(new Animated.Value(1)).current;
-  const ringAnim = useRef(new Animated.Value(0)).current;
+  const completionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selected = PRESETS.find((p) => p.id === selectedId) ?? PRESETS[0];
   const progress = Math.min(count / selected.target, 1);
-  const circumference = 2 * Math.PI * 100; // radius = 100
+  const useNativeDriver = Platform.OS !== "web";
+
+  useEffect(() => {
+    return () => {
+      if (completionTimer.current) {
+        clearTimeout(completionTimer.current);
+      }
+    };
+  }, []);
 
   const handleTap = useCallback(() => {
     if (showOverlay) return; // Stop taps when target reached
@@ -115,8 +115,8 @@ export default function DhikrScreen() {
 
     // Spring animation on button
     Animated.sequence([
-      Animated.timing(scale, { toValue: 0.93, duration: 60, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, friction: 3, useNativeDriver: true }),
+      Animated.timing(scale, { toValue: 0.93, duration: 60, useNativeDriver }),
+      Animated.spring(scale, { toValue: 1, friction: 3, useNativeDriver }),
     ]).start();
 
     // Haptics
@@ -127,17 +127,26 @@ export default function DhikrScreen() {
     // Completed a session
     if (next >= selected.target) {
       setShowOverlay(true);
+      setCanContinue(false);
+      if (completionTimer.current) {
+        clearTimeout(completionTimer.current);
+      }
+      completionTimer.current = setTimeout(() => {
+        setCanContinue(true);
+      }, 650);
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Vibration.vibrate([0, 100, 50, 150]);
       }
     }
-  }, [count, selected.target, scale, showOverlay]);
+  }, [count, selected.target, scale, showOverlay, useNativeDriver]);
 
   const handleContinue = () => {
+    if (!canContinue) return;
     setCount(0);
     setSessions((s) => s + 1);
     setShowOverlay(false);
+    setCanContinue(false);
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -147,10 +156,7 @@ export default function DhikrScreen() {
     setCount(0);
     setSessions(0);
     setShowOverlay(false);
-  };
-
-  const handleResetCurrent = () => {
-    setCount(0);
+    setCanContinue(false);
   };
 
   const accentColor = selected.color;
@@ -173,17 +179,30 @@ export default function DhikrScreen() {
       <View style={styles.counterSection}>
         {/* SVG-like progress ring using borders */}
         <View style={styles.ringOuter}>
-          <View style={[styles.ringBg, { borderColor: theme.border }]} />
-          {/* Simulated filled arc via rotated half-circle */}
-          <View
-            style={[
-              styles.ringFill,
-              {
-                borderColor: accentColor,
-                transform: [{ rotate: `${progress * 360}deg` }],
-              },
-            ]}
-          />
+          <Svg width={250} height={250} style={styles.svgRing}>
+            {/* Background Track */}
+            <Circle
+              cx={125}
+              cy={125}
+              r={115}
+              stroke={theme.isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)"}
+              strokeWidth={10}
+              fill="none"
+            />
+            {/* Progress Fill */}
+            <Circle
+              cx={125}
+              cy={125}
+              r={115}
+              stroke={accentColor}
+              strokeWidth={10}
+              fill="none"
+              strokeDasharray={2 * Math.PI * 115}
+              strokeDashoffset={2 * Math.PI * 115 * (1 - progress)}
+              strokeLinecap="round"
+              transform="rotate(-90 125 125)"
+            />
+          </Svg>
           {/* Inner circle (tap button) */}
           <Animated.View style={{ transform: [{ scale }] }}>
             <TouchableOpacity
@@ -192,6 +211,9 @@ export default function DhikrScreen() {
               activeOpacity={0.85}
             >
               <Text style={[styles.tapArabic, { color: accentColor }]}>{selected.arabic}</Text>
+              <Text style={[styles.tapTranslation, { color: accentColor + "CC" }]} numberOfLines={1}>
+                {selected.label}
+              </Text>
               <Text style={[styles.tapCount, { color: accentColor }]}>{count}</Text>
               <Text style={[styles.tapTarget, { color: accentColor + "99" }]}>
                 / {selected.target}
@@ -207,18 +229,38 @@ export default function DhikrScreen() {
                     { backgroundColor: theme.isDark ? "rgba(0,0,0,0.88)" : "rgba(255,255,255,0.92)" }
                   ]}
                 >
-                  <Animated.View style={{ transform: [{ scale: scale }] }}>
-                    <MaterialCommunityIcons name="check-decagram" size={60} color={accentColor} />
+                  <Animated.View
+                    style={[
+                      styles.overlayIconWrap,
+                      {
+                        backgroundColor: accentColor + "18",
+                        transform: [{ scale }],
+                      },
+                    ]}
+                  >
+                    <MaterialCommunityIcons name="check-decagram" size={34} color={accentColor} />
                   </Animated.View>
                   <Text style={[styles.overlayTitle, { color: theme.textPrimary }]}>Target Reached!</Text>
+                  <Text style={[styles.overlaySub, { color: theme.textSecondary }]}>
+                    Ready when you are.
+                  </Text>
                   
                   <View style={styles.overlayBtns}>
                     <TouchableOpacity
-                      style={[styles.ovrContinueBtn, { backgroundColor: accentColor }]}
+                      style={[
+                        styles.ovrContinueBtn,
+                        {
+                          backgroundColor: canContinue ? accentColor : accentColor + "88",
+                          opacity: canContinue ? 1 : 0.68,
+                        },
+                      ]}
                       onPress={handleContinue}
+                      disabled={!canContinue}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.ovrContinueText}>Continue</Text>
+                      <Text style={styles.ovrContinueText}>
+                        {canContinue ? "Start Next Round" : "Completed"}
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.ovrResetBtn, { borderTopColor: theme.border }]}
@@ -283,6 +325,8 @@ export default function DhikrScreen() {
                   setSelectedId(p.id);
                   setCount(0);
                   setSessions(0);
+                  setShowOverlay(false);
+                  setCanContinue(false);
                 }}
                 activeOpacity={0.8}
               >
@@ -302,6 +346,15 @@ export default function DhikrScreen() {
                   ]}
                 >
                   {p.label}
+                </Text>
+                <Text
+                  style={[
+                    styles.presetMeaning,
+                    { color: active ? "rgba(255,255,255,0.78)" : theme.textSecondary },
+                  ]}
+                  numberOfLines={2}
+                >
+                  English: {p.meaning}
                 </Text>
                 <View
                   style={[
@@ -350,21 +403,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     position: "relative",
   },
-  ringBg: {
+  svgRing: {
     position: "absolute",
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    borderWidth: 8,
-  },
-  ringFill: {
-    position: "absolute",
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    borderWidth: 8,
-    borderLeftColor: "transparent",
-    borderBottomColor: "transparent",
   },
   tapCircle: {
     width: 210,
@@ -379,8 +419,16 @@ const styles = StyleSheet.create({
       native: { shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 6 },
     }),
   },
-  tapArabic: { fontSize: 22, fontFamily: "Inter_400Regular" },
-  tapCount: { fontSize: 56, fontFamily: "Inter_700Bold", lineHeight: 64 },
+  tapArabic: { fontSize: 21, fontFamily: "Inter_400Regular", textAlign: "center" },
+  tapTranslation: {
+    maxWidth: 160,
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    lineHeight: 15,
+    textAlign: "center",
+    marginTop: 2,
+  },
+  tapCount: { fontSize: 50, fontFamily: "Inter_700Bold", lineHeight: 56 },
   tapTarget: { fontSize: 14, fontFamily: "Inter_500Medium" },
   tapHint: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginTop: 4, letterSpacing: 1 },
 
@@ -389,22 +437,49 @@ const styles = StyleSheet.create({
     borderRadius: 105,
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
     zIndex: 10,
   },
-  overlayTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginTop: 8, marginBottom: 16 },
-  overlayBtns: { width: "100%", gap: 0 },
-  ovrContinueBtn: { 
-    paddingVertical: 12, borderRadius: 14, alignItems: "center",
+  overlayIconWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 8,
+  },
+  overlayTitle: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    lineHeight: 21,
+    textAlign: "center",
+    marginBottom: 2,
+  },
+  overlaySub: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    textAlign: "center",
+    lineHeight: 15,
+    marginBottom: 10,
+  },
+  overlayBtns: { width: "100%", alignItems: "center" },
+  ovrContinueBtn: { 
+    width: "86%",
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 9,
     ...Platform.select({
       web: { boxShadow: "0px 4px 12px rgba(0,0,0,0.15)" },
       native: { shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
     }),
   },
-  ovrContinueText: { color: "#fff", fontSize: 15, fontFamily: "Inter_700Bold" },
-  ovrResetBtn: { paddingVertical: 10, alignItems: "center", borderTopWidth: 0 },
-  ovrResetText: { fontSize: 13, fontFamily: "Inter_600SemiBold", textDecorationLine: "underline" },
+  ovrContinueText: { color: "#fff", fontSize: 13, fontFamily: "Inter_700Bold" },
+  ovrResetBtn: { minHeight: 24, paddingHorizontal: 10, alignItems: "center", justifyContent: "center", borderTopWidth: 0 },
+  ovrResetText: { fontSize: 11, fontFamily: "Inter_600SemiBold", textDecorationLine: "underline" },
 
   statsRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
   statBox: {
@@ -433,6 +508,7 @@ const styles = StyleSheet.create({
   },
   presetArabic: { fontSize: 18, fontFamily: "Inter_400Regular" },
   presetLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  presetMeaning: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16 },
   presetTargetBadge: {
     alignSelf: "flex-start",
     borderRadius: 10,

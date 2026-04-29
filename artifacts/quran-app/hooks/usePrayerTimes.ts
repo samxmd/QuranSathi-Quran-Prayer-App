@@ -1,8 +1,10 @@
 import { useState, useCallback, useEffect } from "react";
+import { Platform } from "react-native";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Coordinates, CalculationMethod, PrayerTimes, Madhab, HighLatitudeRule } from "adhan";
-import { syncPrayerNotifications, PrayerAlerts, requestNotificationPermissions } from "@/services/notificationService";
+import type * as ExpoNotifications from "expo-notifications";
+import { syncPrayerNotifications, PrayerAlerts } from "@/services/notificationService";
 
 const LOCATION_STORAGE_KEY = "@prayer_location";
 const ALERTS_STORAGE_KEY = "@prayer_alerts_v2";
@@ -11,6 +13,11 @@ const FALLBACK_LOCATION: LocationData = {
   longitude: 85.324,
   city: "Kathmandu",
 };
+
+function getNotifications(): typeof ExpoNotifications | null {
+  if (Platform.OS === "web") return null;
+  return require("expo-notifications") as typeof ExpoNotifications;
+}
 
 export interface LocationData {
   latitude: number;
@@ -38,8 +45,11 @@ function formatCountdown(ms: number): string {
   if (ms <= 0) return "Now";
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  const s = Math.floor((ms % 60000) / 1000);
+
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 export function usePrayerTimes(enabled: boolean = true) {
@@ -53,9 +63,9 @@ export function usePrayerTimes(enabled: boolean = true) {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
 
-  // Clock ticks
+  // Clock ticks every second
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60000);
+    const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -144,8 +154,16 @@ export function usePrayerTimes(enabled: boolean = true) {
       setLocation(currentLoc);
       computePrayers(currentLoc, new Date());
 
-      if (forceRefresh) {
-        syncPrayerNotifications(currentLoc, parsedAlerts).catch(() => {});
+      /* Ensure prayer notifications are scheduled if we have permissions */
+      const Notifications = getNotifications();
+      const { status } = Notifications ? await Notifications.getPermissionsAsync() : { status: "denied" };
+      if (Notifications && status === "granted") {
+        const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+        const hasPrayerNotifs = scheduled.some((item) => item.content.data?.type === "prayer");
+        
+        if (forceRefresh || !hasPrayerNotifs) {
+          syncPrayerNotifications(currentLoc, parsedAlerts).catch(() => {});
+        }
       }
     } catch {
       setLocation(FALLBACK_LOCATION);
@@ -171,20 +189,6 @@ export function usePrayerTimes(enabled: boolean = true) {
     const newAlerts = { ...alerts, [key]: !alerts[key] };
     setAlerts(newAlerts);
     await AsyncStorage.setItem(ALERTS_STORAGE_KEY, JSON.stringify(newAlerts));
-
-    if (!newAlerts[key]) {
-      if (location) {
-        syncPrayerNotifications(location, newAlerts).catch(() => {});
-      }
-      return;
-    }
-
-    const hasPermission = await requestNotificationPermissions();
-    if (!hasPermission) {
-      setAlerts(alerts);
-      await AsyncStorage.setItem(ALERTS_STORAGE_KEY, JSON.stringify(alerts));
-      return;
-    }
 
     if (location) {
       syncPrayerNotifications(location, newAlerts).catch(() => {});

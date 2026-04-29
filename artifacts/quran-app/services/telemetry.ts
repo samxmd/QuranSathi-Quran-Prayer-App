@@ -1,4 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Sentry from "@sentry/react-native";
+import { getAnalytics, logEvent } from "@react-native-firebase/analytics/lib/modular";
 
 type TelemetryLevel = "info" | "error";
 
@@ -45,12 +47,32 @@ function logDev(event: TelemetryEvent): void {
   logger(`[telemetry] ${event.name}`, event.payload ?? {});
 }
 
+/** Firebase Analytics requires names: letters/numbers/underscores only, max 40 chars, no dots */
+function sanitizeAnalyticsName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_]/g, "_").slice(0, 40);
+}
+
 export async function trackEvent(
   name: string,
   payload?: Record<string, unknown>
 ): Promise<void> {
   const event = createEvent(name, "info", payload);
   logDev(event);
+
+  // Keep product analytics as breadcrumbs only. Sending normal app events as
+  // Sentry messages creates noisy "issues" such as Event: surah.opened.
+  try {
+    Sentry.addBreadcrumb({
+      category: "app.event",
+      message: name,
+      level: "info",
+      data: payload,
+    });
+  } catch { /* ignore */ }
+
+  // Forward to Firebase Analytics (sanitize name: no dots allowed)
+  logEvent(getAnalytics(), sanitizeAnalyticsName(name), payload).catch(() => {});
+
   await persistEvent(event);
 }
 
@@ -76,6 +98,27 @@ export async function trackError(
   });
 
   logDev(event);
+
+  // Forward to Sentry (never let Sentry break app flows)
+  try {
+    if (error instanceof Error) {
+      Sentry.captureException(error, {
+        extra: { ...payload, eventName: name },
+      });
+    } else {
+      Sentry.captureMessage(`Error Event: ${name}`, {
+        level: "error",
+        extra: { ...payload, error: String(error) },
+      });
+    }
+  } catch { /* ignore */ }
+
+  // Forward to Firebase Analytics (sanitize name: no dots allowed)
+  logEvent(getAnalytics(), `err_${sanitizeAnalyticsName(name)}`, {
+    ...payload,
+    error_msg: normalizedError.message,
+  }).catch(() => {});
+
   await persistEvent(event);
 }
 
