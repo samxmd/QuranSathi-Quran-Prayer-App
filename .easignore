@@ -1,0 +1,42 @@
+# Ignore node_modules everywhere
+node_modules/
+**/node_modules/
+
+# Expo / EAS build
+.expo/
+**/.expo/
+
+# Git
+.git/
+
+# Build artifacts
+dist/
+**/dist/
+build/
+**/build/
+
+# Android specific
+**/android/.gradle/
+**/android/app/build/
+**/android/build/
+*.jks
+*.keystore
+
+# iOS specific
+**/ios/Pods/
+**/ios/build/
+*.p8
+*.p12
+*.mobileprovision
+*.cert
+
+# Cache
+.cache/
+**/.cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Local envs
+.env*.local

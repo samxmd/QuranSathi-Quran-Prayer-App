@@ -5,14 +5,16 @@
   "scripts": {
     "preinstall": "node -e \"const fs=require('fs'); ['package-lock.json','yarn.lock'].forEach((file)=>{ if (fs.existsSync(file)) fs.rmSync(file); }); const ua=process.env.npm_config_user_agent || ''; if (!ua.startsWith('pnpm/')) { console.error('Use pnpm instead'); process.exit(1); }\"",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "android:preview": "pnpm --dir artifacts/quran-app run release:android:preview",
+    "android:release": "pnpm --dir artifacts/quran-app run release:android",
+    "android:submit": "pnpm --dir artifacts/quran-app run submit:android",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --if-present run typecheck"
   },
   "private": true,
   "devDependencies": {
-    "lightningcss-win32-x64-msvc": "1.31.1",
     "prettier": "^3.8.1",
     "typescript": "~5.9.2"
   },
-  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"
+  "packageManager": "pnpm@10.33.0"
 }

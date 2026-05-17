@@ -56,7 +56,7 @@ export default function FavoritesScreen() {
   const renderAyah = ({ item }: { item: Bookmark }) => (
     <TouchableOpacity
       style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-      onPress={() => router.push(`/reader/${item.surahId}`)}
+      onPress={() => router.push(`/reader/${item.surahId}?ayah=${item.ayahNumber}`)}
       activeOpacity={0.8}
     >
       {/* Gold left bar */}
@@ -153,7 +153,7 @@ export default function FavoritesScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-              onPress={() => router.push({ pathname: "/duas", params: { cat: item.categoryId } })}
+              onPress={() => router.push(`/duas?cat=${item.categoryId}&id=${item.id}`)}
               activeOpacity={0.8}
             >
               <View style={[styles.goldBar, { backgroundColor: theme.accent }]} />

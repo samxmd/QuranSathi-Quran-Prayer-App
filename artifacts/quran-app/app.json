@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "QuranSathi",
-    "slug": "quran-app",
-    "version": "1.0.0",
+    "slug": "quransathi",
+    "version": "1.0.5",
     "updates": {
       "enabled": false,
       "checkAutomatically": "NEVER"
@@ -11,35 +11,39 @@
     "icon": "./assets/images/icon.png",
     "scheme": "quran-app",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#003D29"
     },
     "ios": {
-      "jsEngine": "hermes",
       "supportsTablet": false,
-      "bundleIdentifier": "com.quransathi.app",
+      "bundleIdentifier": "com.fossatechnology.quransathi",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "NurQuran uses your location to show prayer times and Qibla direction.",
+        "NSLocationWhenInUseUsageDescription": "QuranSathi uses your location to show prayer times and Qibla direction.",
         "UIBackgroundModes": [
           "audio"
         ]
       }
     },
     "android": {
-      "jsEngine": "hermes",
-      "package": "com.quransathi.app",
-      "usesCleartextTraffic": true,
-      "versionCode": 1,
+      "googleServicesFile": "./google-services.json",
+      "package": "com.fossatechnology.quransathiapp",
+      "versionCode": 6,
+      "blockedPermissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
       "permissions": [
         "INTERNET",
         "POST_NOTIFICATIONS",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_AUDIO",
+        "android.permission.WAKE_LOCK",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
@@ -52,18 +56,10 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-web-browser",
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "NurQuran uses your location to show prayer times and Qibla direction."
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/icon.png",
-          "color": "#003D29"
+          "locationWhenInUsePermission": "QuranSathi uses your location to show prayer times and Qibla direction."
         }
       ],
       [
@@ -72,18 +68,50 @@
           "enableBackgroundPlayback": true
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#003D29"
+        }
+      ],
       "expo-sqlite",
-      "expo-asset"
+      "expo-asset",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "fossa-technology",
+          "project": "react-native"
+        }
+      ],
+      "@react-native-firebase/app",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          },
+          "android": {
+            "kotlinVersion": "2.0.21",
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": true,
+      "baseUrl": ""
     },
     "extra": {
+      "router": {
+        "origin": "http://localhost:8081",
+        "baseUrl": ""
+      },
       "eas": {
-        "projectId": "dc8d0ff8-809e-4432-af5a-66a994f37ff1"
+        "projectId": "13a8b149-65de-410d-acb8-e012dfbe4de6"
       }
     },
-    "owner": "sameerahamadfossa"
+    "owner": "sam.amd"
   }
 }

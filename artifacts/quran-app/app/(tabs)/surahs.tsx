@@ -17,6 +17,7 @@ import { SurahCard } from "@/components/SurahCard";
 import { SURAHS } from "@/data/surahs";
 import { useTheme } from "@/hooks/useTheme";
 import { useQuran } from "@/context/QuranContext";
+import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/PageHeader";
 
 type FilterType = "all" | "meccan" | "medinan" | "read" | "unread";
@@ -36,6 +37,7 @@ export default function SurahsScreen() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
   const searchRef = useRef<TextInput>(null);
+  const { t } = useTranslation();
 
   const readCount = readSurahIds.length;
   const progressPct = Math.round((readCount / 114) * 100);
@@ -67,7 +69,7 @@ export default function SurahsScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* ── Header ── */}
       <PageHeader
-        title="Surahs"
+        title={t("surahs")}
         arabicTitle="سور القرآن"
         subtitle={`${readCount} of 114 surahs read · ${progressPct}%`}
       >
@@ -83,7 +85,7 @@ export default function SurahsScreen() {
         <TextInput
           ref={searchRef}
           style={[styles.searchInput, { color: theme.textPrimary }]}
-          placeholder="Search by name, number, meaning…"
+          placeholder={t("searchPlaceholder")}
           placeholderTextColor={theme.textSecondary}
           value={search}
           onChangeText={setSearch}
@@ -111,7 +113,7 @@ export default function SurahsScreen() {
           activeOpacity={0.8}
         >
           <MaterialCommunityIcons name="view-grid-outline" size={16} color={theme.primary} />
-          <Text style={[styles.juzBtnText, { color: theme.primary }]}>By Juz</Text>
+          <Text style={[styles.juzBtnText, { color: theme.primary }]}>{t("juz")}</Text>
         </TouchableOpacity>
 
         {/* Filter chips scroll */}
@@ -171,7 +173,7 @@ export default function SurahsScreen() {
             style={[styles.clearAllBtn, { borderColor: theme.border }]}
           >
             <Feather name="x" size={11} color={theme.textSecondary} />
-            <Text style={[styles.clearAllText, { color: theme.textSecondary }]}>Clear</Text>
+            <Text style={[styles.clearAllText, { color: theme.textSecondary }]}>{t("clearAll")}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -200,15 +202,15 @@ export default function SurahsScreen() {
             <View style={[styles.emptyIcon, { backgroundColor: theme.cardBackground }]}>
               <Feather name="search" size={32} color={theme.textSecondary} />
             </View>
-            <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>No surahs found</Text>
+            <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>{t("noResults")}</Text>
             <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-              Try a different name, number, or{"\n"}clear the active filter
+              {t("noResultsSub")}
             </Text>
             <TouchableOpacity
               style={[styles.emptyBtn, { backgroundColor: theme.primary }]}
               onPress={() => { setSearch(""); setFilter("all"); }}
             >
-              <Text style={[styles.emptyBtnText, { color: theme.primaryForeground }]}>Show all surahs</Text>
+              <Text style={[styles.emptyBtnText, { color: theme.primaryForeground }]}>{t("clearAll")}</Text>
             </TouchableOpacity>
           </View>
         }

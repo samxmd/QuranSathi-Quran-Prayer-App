@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   LayoutAnimation,
@@ -16,17 +16,59 @@ import { LinearGradient } from "expo-linear-gradient";
 import Feather from "@expo/vector-icons/Feather";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import * as Haptics from "expo-haptics";
-import * as Sharing from "expo-sharing";
-import ViewShot from "react-native-view-shot";
 
 import { useQuran } from "@/context/QuranContext";
-import type { Ayah } from "@/data/ayahs";
+import type { Ayah, Word } from "@/data/ayahs";
 import type { AudioStatus } from "@/hooks/useAudio";
 import { useTheme } from "@/hooks/useTheme";
 import { fetchTafsir } from "@/services/tafsirService";
+import { fetchWordsForAyah } from "@/services/quranApi";
 import { TRANSLATION_SOURCES, type TranslationLanguage } from "@/services/translationSources";
+import { getEditionDisplayInfo } from "@/services/availableTranslations";
+import { ArabicWord } from "./ArabicWord";
+import { WordDetailSheet } from "./WordDetailSheet";
+import { AyahShareSheet } from "./AyahShareSheet";
+import { TajweedText } from "./TajweedText";
+import { TranslationText } from "./TranslationText";
 
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+const toArabicNumber = (num: number) => {
+  const arabicNumbers = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+  return num.toString().split("").map((c) => arabicNumbers[parseInt(c)]).join("");
+};
+
+function AyahEndMark({
+  ayahNumber,
+  fontSize,
+  color,
+}: {
+  ayahNumber: number;
+  fontSize: number;
+  color: string;
+}) {
+  return (
+    <Text
+      style={[
+        styles.ayahEndMark,
+        {
+          color,
+          fontSize: Math.max(16, fontSize * 0.8),
+          lineHeight: fontSize * 2.5,
+        },
+      ]}
+    >
+      {" "}
+      {"\u06DD"}{toArabicNumber(ayahNumber)}
+    </Text>
+  );
+}
+
+const isFabricEnabled = Boolean((globalThis as { nativeFabricUIManager?: unknown }).nativeFabricUIManager);
+
+if (
+  Platform.OS === "android" &&
+  !isFabricEnabled &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -39,6 +81,7 @@ interface AyahCardProps {
   audioStatus?: AudioStatus;
   isCurrentAudio?: boolean;
   onPlay?: (ayah: Ayah) => void;
+  isWbwEnabled?: boolean;
 }
 
 function AyahCardComponent({
@@ -50,27 +93,78 @@ function AyahCardComponent({
   audioStatus = "idle",
   isCurrentAudio = false,
   onPlay,
+  isWbwEnabled = false,
 }: AyahCardProps) {
   const theme = useTheme();
-  const { isBookmarked, addBookmark, removeBookmark } = useQuran();
+  const { 
+    isBookmarked, addBookmark, removeBookmark, 
+    wbwOnboarded, setWbwOnboarded, 
+    isTransliterationEnabled, uiLanguage,
+    showTajweed 
+  } = useQuran();
   const bookmarked = isBookmarked(ayah.id);
-  const shareCardRef = useRef<ViewShot | null>(null);
 
   const [showTafsir, setShowTafsir] = useState(false);
   const [tafsirText, setTafsirText] = useState("");
   const [tafsirLoading, setTafsirLoading] = useState(false);
   const [tafsirError, setTafsirError] = useState(false);
   const [showShareSheet, setShowShareSheet] = useState(false);
-  const [shareLoading, setShareLoading] = useState(false);
+
+  // Word-by-Word State
+  const [currentAyahId, setCurrentAyahId] = useState(ayah.id);
+  const [words, setWords] = useState<Word[] | undefined>(ayah.words);
+  const [selectedWord, setSelectedWord] = useState<Word | null>(null);
+  const [detailWord, setDetailWord] = useState<Word | null>(null);
+  const [wbwOverride, setWbwOverride] = useState<boolean | null>(null);
+  const [isWbwLoading, setIsWbwLoading] = useState(false);
+  const [wbwLoadFailed, setWbwLoadFailed] = useState(false);
+
+  if (ayah.id !== currentAyahId) {
+    setCurrentAyahId(ayah.id);
+    setWords(ayah.words);
+    setSelectedWord(null);
+    setDetailWord(null);
+    setWbwOverride(null);
+    setIsWbwLoading(false);
+    setWbwLoadFailed(false);
+    setShowTafsir(false);
+    setTafsirText("");
+    setTafsirLoading(false);
+    setTafsirError(false);
+    setShowShareSheet(false);
+  }
+
+  const activeWbw = wbwOverride ?? isWbwEnabled;
+  const canShowTajweed = showTajweed && !!ayah.tajweed;
+
+  useEffect(() => {
+    if (activeWbw && !words) {
+      setIsWbwLoading(true);
+      setWbwLoadFailed(false);
+      fetchWordsForAyah(ayah.id)
+        .then(setWords)
+        .catch(() => {
+          setWbwLoadFailed(true);
+        })
+        .finally(() => {
+          setIsWbwLoading(false);
+        });
+    }
+  }, [activeWbw, words, ayah.id]);
 
   const activeTranslations = useMemo(
     () =>
       enabledLanguages
-        .map((language) => ({
-          code: language,
-          label: TRANSLATION_SOURCES[language].label,
-          text: ayah.translations[language] ?? "",
-        }))
+        .map((language) => {
+          const source = TRANSLATION_SOURCES[language as keyof typeof TRANSLATION_SOURCES];
+          const editionInfo = source ? null : getEditionDisplayInfo(language);
+          const text = ayah.translations[language] ?? "";
+          return {
+            code: language,
+            label: source?.label || editionInfo?.label || language.toUpperCase(),
+            text,
+          };
+        })
         .filter((item) => item.text.trim().length > 0),
     [ayah.translations, enabledLanguages]
   );
@@ -131,61 +225,52 @@ function AyahCardComponent({
     await Share.share({ message: shareMessage });
   }, [shareMessage]);
 
-  const handleShareImage = useCallback(
-    async (target?: "whatsapp" | "instagram") => {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-      if (Platform.OS === "web") {
-        await shareTextFallback();
-        return;
-      }
-
-      try {
-        setShareLoading(true);
-
-        const sharingAvailable = await Sharing.isAvailableAsync();
-        const captureUri = await shareCardRef.current?.capture?.();
-
-        if (!sharingAvailable || !captureUri) {
-          await shareTextFallback();
-          return;
-        }
-
-        const dialogTitle =
-          target === "whatsapp"
-            ? "Share ayah image to WhatsApp"
-            : target === "instagram"
-              ? "Share ayah image to Instagram"
-              : "Share ayah image";
-
-        await Sharing.shareAsync(captureUri, {
-          mimeType: "image/png",
-          UTI: "public.png",
-          dialogTitle,
-        });
-      } catch {
-        await shareTextFallback();
-      } finally {
-        setShareLoading(false);
-      }
-    },
-    [shareTextFallback]
-  );
-
   const isPlaying = isCurrentAudio && audioStatus === "playing";
   const isLoading = isCurrentAudio && audioStatus === "loading";
+
+  const handleWordPress = useCallback(async (word: Word) => {
+    await Haptics.selectionAsync();
+    setSelectedWord(word === selectedWord ? null : word);
+    setWbwLoadFailed(false);
+    if (!wbwOnboarded) {
+      setWbwOnboarded(true);
+    }
+  }, [selectedWord, wbwOnboarded, setWbwOnboarded]);
+
+  const handleWordLongPress = useCallback(async (word: Word) => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setDetailWord(word);
+    setSelectedWord(null);
+  }, []);
+
+  const toggleWbw = useCallback(async () => {
+    if (!activeWbw && !words) {
+      try {
+        setIsWbwLoading(true);
+        setWbwLoadFailed(false);
+        const fetched = await fetchWordsForAyah(ayah.id);
+        setWords(fetched);
+      } catch (err) {
+        setWbwLoadFailed(true);
+        console.warn("Failed to fetch words:", err);
+      } finally {
+        setIsWbwLoading(false);
+      }
+    }
+    setWbwOverride(!activeWbw);
+    setSelectedWord(null);
+  }, [activeWbw, words, ayah.id]);
 
   return (
     <View
       style={[
         styles.card,
         {
-          backgroundColor: isCurrentAudio
-            ? theme.isDark
-              ? theme.gradientEnd
-              : theme.cardBackground + "18"
+          backgroundColor: isCurrentAudio && theme.isDark 
+            ? theme.gradientEndDark 
             : theme.cardBackground,
           borderColor: isCurrentAudio ? theme.primary : theme.border,
+          borderWidth: isCurrentAudio ? 1.5 : 1,
         },
       ]}
     >
@@ -197,33 +282,62 @@ function AyahCardComponent({
           <Text style={styles.verseNumberText}>{ayah.ayahNumber}</Text>
         </LinearGradient>
 
-        <View style={styles.actions}>
+        <View style={styles.headerActions}>
           {onPlay && (
             <TouchableOpacity
               onPress={() => onPlay(ayah)}
               style={[
-                styles.actionBtn,
+                styles.playBtn,
                 {
-                  backgroundColor: isCurrentAudio
-                    ? isPlaying
-                      ? theme.primary
-                      : theme.cardBackground
-                    : theme.cardBackground,
+                  backgroundColor: isPlaying ? theme.primary : theme.cardBackground,
+                  borderColor: isPlaying ? theme.primary : theme.border,
                 },
               ]}
               activeOpacity={0.7}
             >
               {isLoading ? (
-                <ActivityIndicator size="small" color={theme.primaryForeground} />
+                <ActivityIndicator size="small" color={isPlaying ? theme.primaryForeground : theme.primary} />
               ) : (
                 <Feather
                   name={isPlaying ? "pause" : "play"}
-                  size={15}
-                  color={isCurrentAudio ? theme.primaryForeground : theme.textSecondary}
+                  size={16}
+                  color={isPlaying ? theme.primaryForeground : theme.primary}
                 />
               )}
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity
+            onPress={() => {
+              void toggleWbw();
+            }}
+            style={[
+              styles.modeToggleBtn,
+              {
+                backgroundColor: activeWbw ? theme.primary : theme.cardBackground,
+                borderColor: activeWbw ? theme.primary : theme.border,
+              },
+            ]}
+            activeOpacity={0.7}
+          >
+            {isWbwLoading ? (
+              <ActivityIndicator size="small" color={activeWbw ? theme.primaryForeground : theme.primary} />
+            ) : (
+              <View style={styles.modeToggleInner}>
+                <Text
+                  style={[
+                    styles.modeToggleText,
+                    { color: activeWbw ? theme.primaryForeground : theme.textSecondary },
+                  ]}
+                >
+                  {activeWbw ? "Ayah" : "Words"}
+                </Text>
+                {!activeWbw && canShowTajweed && (
+                  <View style={styles.tajweedDot} />
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setShowShareSheet(true)}
@@ -235,74 +349,184 @@ function AyahCardComponent({
 
           <TouchableOpacity
             onPress={handleBookmark}
-            style={[
-              styles.actionBtn,
-              { backgroundColor: bookmarked ? theme.accent : theme.cardBackground },
-            ]}
+            style={styles.actionBtn}
             activeOpacity={0.7}
           >
+            {bookmarked ? (
+              <LinearGradient
+                colors={theme.isDark ? ["#D4AC7A", "#B8986A"] : ["#D4AC7A", "#A68652"]}
+                style={StyleSheet.absoluteFill}
+              />
+            ) : (
+              <View style={[
+                StyleSheet.absoluteFill, 
+                { 
+                  backgroundColor: theme.cardBackground, 
+                  borderWidth: 1, 
+                  borderColor: theme.border,
+                  borderRadius: 12 
+                }
+              ]} />
+            )}
             <MaterialCommunityIcons
               name={bookmarked ? "bookmark" : "bookmark-outline"}
               size={18}
-              color={bookmarked ? theme.primaryForeground : theme.textSecondary}
+              color={bookmarked ? "#FFFFFF" : theme.textSecondary}
+              style={{ zIndex: 1 }}
             />
           </TouchableOpacity>
         </View>
       </View>
 
-      <Text
-        style={[
-          styles.arabic,
-          {
-            color: theme.textPrimary,
-            fontSize,
-            lineHeight: fontSize * 2,
-          },
-        ]}
-      >
-        {ayah.arabic}
-      </Text>
+      <View style={styles.arabicContainer}>
+        {!activeWbw ? (
+          <TouchableOpacity activeOpacity={0.9} onPress={toggleWbw}>
+            {(showTajweed && ayah.tajweed) ? (
+              <TajweedText
+                text={ayah.tajweed}
+                fallbackColor={theme.textPrimary}
+                fontSize={fontSize}
+                isDark={theme.isDark}
+                style={styles.arabic}
+              />
+            ) : (
+              <Text
+                style={[
+                  styles.arabic,
+                  {
+                    color: theme.textPrimary,
+                    fontSize,
+                    lineHeight: fontSize * 2.5,
+                  },
+                ]}
+              >
+                {ayah.arabic}
+              </Text>
+            )}
+            <Text
+              style={[
+                styles.arabic,
+                styles.ayahEndMarkRow,
+                {
+                  color: theme.textPrimary,
+                  fontSize,
+                  lineHeight: fontSize * 2.5,
+                },
+              ]}
+            >
+              <AyahEndMark
+                ayahNumber={ayah.ayahNumber}
+                fontSize={fontSize}
+                color={theme.textPrimary}
+              />
+            </Text>
+          </TouchableOpacity>
+        ) : isWbwLoading ? (
+          <View style={styles.wbwStatusBox}>
+            <ActivityIndicator size="small" color={theme.primary} />
+          </View>
+        ) : words && words.length > 0 ? (
+          <View style={styles.wordsWrapper}>
+            {words.map((word, idx) => (
+              <ArabicWord
+                key={word.id || idx}
+                word={word}
+                fontSize={fontSize}
+                color={theme.textPrimary}
+                isSelected={selectedWord?.id === word.id}
+                showTransliteration={isTransliterationEnabled}
+                onPress={handleWordPress}
+                onLongPress={handleWordLongPress}
+              />
+            ))}
+          </View>
+        ) : wbwLoadFailed ? (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={toggleWbw}
+            style={[styles.wbwStatusBox, { borderColor: theme.border, backgroundColor: theme.cardBackground }]}
+          >
+            <Text style={[styles.wbwStatusText, { color: theme.textSecondary }]}>Could not load words</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.wbwStatusBox} />
+        )}
+
+        {activeWbw && !selectedWord && !wbwOnboarded && !isWbwLoading && words && words.length > 0 && (
+          <View style={[styles.wbwHintPill, { backgroundColor: theme.isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }]}>
+            <Text style={[styles.wbwHintText, { color: theme.textSecondary }]}>Tap a word</Text>
+          </View>
+        )}
+
+        {selectedWord && (
+          <View
+            style={[
+              styles.meaningPanel,
+              {
+                backgroundColor: theme.isDark ? "rgba(255,255,255,0.06)" : theme.primary + "08",
+                borderColor: theme.primary + "22",
+              },
+            ]}
+          >
+            <Text style={[styles.meaningPrimary, { color: theme.textPrimary }]}>
+              {selectedWord.translation}
+            </Text>
+            {!!selectedWord.transliteration && (
+              <Text style={[styles.meaningSecondary, { color: theme.textSecondary }]}>
+                {selectedWord.transliteration}
+              </Text>
+            )}
+            <Text style={[styles.meaningMeta, { color: theme.textSecondary }]}>Long press for details</Text>
+          </View>
+        )}
+      </View>
 
       <View style={[styles.separator, { backgroundColor: theme.accent, opacity: 0.25 }]} />
+
+      {isTransliterationEnabled && ayah.transliteration && (
+        <View style={styles.transliterationContainer}>
+          <Text style={[styles.transliterationText, { color: theme.textSecondary }]}>
+            {ayah.transliteration}
+          </Text>
+        </View>
+      )}
 
       {activeTranslations.map((translation, index) => {
         const labelColor = translation.code === "en" ? theme.primary : theme.textSecondary;
         return (
           <View
             key={translation.code}
-            style={[styles.translationContainer, index > 0 ? { marginTop: 10 } : null]}
+            style={[styles.translationContainer, index > 0 || (isTransliterationEnabled && ayah.transliteration) ? { marginTop: 10 } : null]}
           >
             <View style={styles.labelRow}>
               <View style={[styles.labelDot, { backgroundColor: labelColor }]} />
               <Text style={[styles.translationLabel, { color: labelColor }]}>{translation.label}</Text>
             </View>
-            <Text
-              style={[
-                styles.translationText,
-                translation.code === "ne" || translation.code === "bn" ? styles.southAsianText : null,
-                { color: theme.textPrimary },
-              ]}
-            >
-              {translation.text}
-            </Text>
+            <TranslationText
+              text={translation.text}
+              languageCode={translation.code}
+              baseFontSize={translation.code === "ne" || translation.code === "bn" ? 15 : 16}
+              color={theme.textPrimary}
+              style={translation.code === "ne" || translation.code === "bn" ? styles.southAsianText : undefined}
+            />
           </View>
         );
       })}
 
       <TouchableOpacity
         onPress={handleTafsir}
-        style={[
-          styles.tafsirBtn,
-          {
-            backgroundColor: showTafsir ? theme.cardBackground : theme.cardBackground,
-            borderColor: showTafsir ? theme.primary : "transparent",
-          },
-        ]}
+          style={[
+            styles.tafsirBtn,
+            {
+              backgroundColor: showTafsir ? theme.primary + "10" : theme.border + "15",
+              borderColor: showTafsir ? theme.primary : theme.border,
+            },
+          ]}
         activeOpacity={0.75}
       >
         <Feather
           name={showTafsir ? "chevron-up" : "book-open"}
-          size={13}
+          size={15}
           color={showTafsir ? theme.primary : theme.textSecondary}
         />
         <Text
@@ -329,143 +553,27 @@ function AyahCardComponent({
         </View>
       )}
 
-      <Modal
+      <WordDetailSheet
+        visible={!!detailWord}
+        onClose={() => setDetailWord(null)}
+        word={detailWord}
+      />
+
+      <AyahShareSheet
         visible={showShareSheet}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowShareSheet(false)}
-      >
-        <TouchableOpacity
-          style={styles.shareOverlay}
-          activeOpacity={1}
-          onPress={() => {
-            if (!shareLoading) setShowShareSheet(false);
-          }}
-        />
-
-        <View style={[styles.shareSheet, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-          <View style={[styles.shareHandle, { backgroundColor: theme.border }]} />
-
-          <View style={styles.shareHeader}>
-            <View style={styles.shareHeaderText}>
-              <Text style={[styles.shareTitle, { color: theme.textPrimary }]}>Share Ayah as Image</Text>
-              <Text style={[styles.shareSub, { color: theme.textSecondary }]}>
-                Designed for WhatsApp chats, statuses, Instagram stories, and reels covers.
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={() => setShowShareSheet(false)}
-              style={[styles.closeBtn, { backgroundColor: theme.cardBackground }]}
-              disabled={shareLoading}
-            >
-              <Feather name="x" size={16} color={theme.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView contentContainerStyle={styles.shareContent} showsVerticalScrollIndicator={false}>
-            <ViewShot
-              ref={shareCardRef}
-              options={{ format: "png", quality: 1, result: "tmpfile" }}
-              style={styles.captureWrap}
-            >
-              <LinearGradient
-                colors={theme.isDark ? [theme.gradientStartDark, theme.gradientStart, theme.gradientEndDark] : [theme.gradientStart, theme.gradientEnd, theme.accent]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.shareCard}
-              >
-                <View style={styles.shareGlowLarge} />
-                <View style={styles.shareGlowSmall} />
-
-                <View style={styles.shareChipRow}>
-                  <View style={styles.shareChip}>
-                    <Text style={styles.shareChipText}>QuranSathi</Text>
-                  </View>
-                  <Text style={styles.shareReference}>
-                    {surahName} {ayah.ayahNumber}
-                  </Text>
-                </View>
-
-                <Text style={styles.shareArabic}>{ayah.arabic}</Text>
-
-                <View style={styles.shareDividerRow}>
-                  <View style={styles.shareDivider} />
-                  <Text style={styles.shareDividerMark}>+</Text>
-                  <View style={styles.shareDivider} />
-                </View>
-
-                {activeTranslations.map((translation, index) => (
-                  <Text
-                    key={translation.code}
-                    style={[
-                      styles.shareTranslation,
-                      index === 0 ? styles.shareTranslationPrimary : styles.shareTranslationSecondary,
-                    ]}
-                  >
-                    {translation.text}
-                  </Text>
-                ))}
-
-                <View style={styles.shareFooter}>
-                  <Text style={styles.shareFooterTitle}>QuranSathi — Your Quran Companion</Text>
-                  <Text style={styles.shareFooterSub}>Read. Reflect. Share khair with our free app.</Text>
-                </View>
-              </LinearGradient>
-            </ViewShot>
-
-            <View style={styles.shareActions}>
-              <TouchableOpacity
-                onPress={() => handleShareImage("whatsapp")}
-                style={[styles.sharePrimaryBtn, { backgroundColor: theme.primary }]}
-                activeOpacity={0.85}
-                disabled={shareLoading}
-              >
-                <Feather name="message-circle" size={16} color={theme.primaryForeground} />
-                <Text style={[styles.sharePrimaryBtnText, { color: theme.primaryForeground }]}>
-                  {shareLoading ? "Preparing..." : "Share to WhatsApp"}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleShareImage("instagram")}
-                style={[styles.shareSecondaryBtn, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-                activeOpacity={0.85}
-                disabled={shareLoading}
-              >
-                <Feather name="instagram" size={16} color={theme.primary} />
-                <Text style={[styles.shareSecondaryBtnText, { color: theme.textPrimary }]}>
-                  Share to Instagram
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => handleShareImage()}
-                style={[styles.shareSecondaryBtn, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-                activeOpacity={0.85}
-                disabled={shareLoading}
-              >
-                <Feather name="image" size={16} color={theme.textSecondary} />
-                <Text style={[styles.shareSecondaryBtnText, { color: theme.textPrimary }]}>
-                  Share Image
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={shareTextFallback}
-                style={[styles.shareSecondaryBtn, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
-                activeOpacity={0.85}
-                disabled={shareLoading}
-              >
-                <Feather name="type" size={16} color={theme.textSecondary} />
-                <Text style={[styles.shareSecondaryBtnText, { color: theme.textPrimary }]}>
-                  Share Text
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
+        onClose={() => setShowShareSheet(false)}
+        ayah={ayah}
+        surahName={surahName}
+        surahId={surahId}
+        uiLanguage={uiLanguage}
+        translations={activeTranslations}
+        initialLangCode={
+          activeTranslations.find((t) => t.code === "bn")?.code ||
+          activeTranslations.find((t) => t.code === uiLanguage)?.code || 
+          activeTranslations[0]?.code || 
+          "en"
+        }
+      />
     </View>
   );
 }
@@ -479,21 +587,23 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     padding: 20,
-    ...(process.env.EXPO_OS === "web"
-      ? ({ boxShadow: "0px 3px 10px rgba(0,0,0,0.07)" } as any)
-      : ({
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: 0.07,
-          shadowRadius: 10,
-          elevation: 3,
-        } as any)),
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 3,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 18,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 1,
   },
   verseNumberBadge: {
     width: 38,
@@ -511,22 +621,126 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
+  playBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
   actionBtn: {
     width: 36,
     height: 36,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   arabic: {
-    fontFamily: "Inter_400Regular",
+    fontFamily: "ScheherazadeNew_700Bold",
     textAlign: "right",
-    writingDirection: "rtl",
+    paddingHorizontal: 8,
+  },
+  ayahEndMark: {
+    fontFamily: "ScheherazadeNew_700Bold",
+  },
+  ayahEndMarkRow: {
+    marginTop: -8,
     marginBottom: 16,
+  },
+  arabicContainer: {
+    position: "relative",
+    paddingTop: 58,
+    paddingBottom: 16,
+    paddingHorizontal: 4,
+  },
+  modeToggleBtn: {
+    minWidth: 88,
+    height: 36,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  modeToggleInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  modeToggleText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.5,
+  },
+  tajweedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#2ECC71",
+  },
+  wbwStatusBox: {
+    minHeight: 90,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  wbwStatusText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+  },
+  wordsWrapper: {
+    flexDirection: "row-reverse",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+    marginBottom: 8,
+  },
+  wbwHintPill: {
+    alignSelf: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    marginTop: 6,
+  },
+  wbwHintText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  meaningPanel: {
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  meaningPrimary: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  meaningSecondary: {
+    marginTop: 3,
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    textAlign: "center",
+  },
+  meaningMeta: {
+    marginTop: 6,
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    textAlign: "center",
+    opacity: 0.8,
   },
   separator: {
     height: 1,
-    marginBottom: 14,
+    marginTop: 6,
+    marginBottom: 20,
     borderRadius: 99,
   },
   translationContainer: {},
@@ -542,32 +756,41 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   translationLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
     textTransform: "uppercase",
   },
   translationText: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: "Inter_400Regular",
-    lineHeight: 24,
+    lineHeight: 26,
   },
   southAsianText: {
     fontSize: 15,
     lineHeight: 26,
   },
+  transliterationContainer: {
+    marginBottom: 8,
+  },
+  transliterationText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    lineHeight: 22,
+    fontStyle: "italic",
+  },
   tafsirBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginTop: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
+    gap: 8,
+    marginTop: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
     alignSelf: "flex-start",
     borderWidth: 1,
   },
   tafsirBtnText: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
   tafsirBox: {
@@ -578,200 +801,16 @@ const styles = StyleSheet.create({
   },
   tafsirText: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 22,
+    fontFamily: "Merriweather_400Regular",
+    lineHeight: 24,
   },
   tafsirError: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
   },
-  shareOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.44)",
-  },
-  shareSheet: {
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    maxHeight: "84%",
-  },
-  shareHandle: {
-    width: 42,
-    height: 4,
-    borderRadius: 999,
-    alignSelf: "center",
-    marginBottom: 16,
-  },
-  shareHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 14,
-  },
-  shareHeaderText: {
-    flex: 1,
-  },
-  shareTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-  },
-  shareSub: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 20,
-    marginTop: 4,
-  },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  shareContent: {
-    paddingBottom: 24,
-  },
-  captureWrap: {
-    borderRadius: 28,
-    overflow: "hidden",
-  },
-  shareCard: {
-    minHeight: 470,
-    padding: 24,
-    justifyContent: "space-between",
-    overflow: "hidden",
-  },
-  shareGlowLarge: {
-    position: "absolute",
-    top: -36,
-    right: -30,
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: "rgba(255,255,255,0.09)",
-  },
-  shareGlowSmall: {
-    position: "absolute",
-    bottom: 40,
-    left: -30,
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-  shareChipRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  shareChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-  },
-  shareChipText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-  },
-  shareReference: {
-    color: "rgba(255,255,255,0.86)",
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  shareArabic: {
-    color: "#FFFFFF",
-    fontSize: 30,
-    lineHeight: 54,
-    textAlign: "right",
-    writingDirection: "rtl",
-    fontFamily: "Inter_400Regular",
-    marginTop: 28,
-  },
-  shareDividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginVertical: 18,
-  },
-  shareDivider: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.28)",
-  },
-  shareDividerMark: {
-    color: "#F5E9C6",
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-  },
-  shareTranslation: {
-    color: "#FFFFFF",
-    lineHeight: 28,
-  },
-  shareTranslationPrimary: {
-    fontSize: 18,
-    fontFamily: "Inter_600SemiBold",
-  },
-  shareTranslationSecondary: {
-    color: "rgba(255,255,255,0.92)",
-    fontSize: 16,
-    fontFamily: "Inter_400Regular",
-    marginTop: 16,
-  },
-  shareFooter: {
-    marginTop: 26,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.18)",
-  },
-  shareFooterTitle: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-  },
-  shareFooterSub: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 12,
-    lineHeight: 18,
-    fontFamily: "Inter_400Regular",
-    marginTop: 4,
-  },
   shareActions: {
     gap: 10,
     marginTop: 14,
-  },
-  sharePrimaryBtn: {
-    minHeight: 50,
-    borderRadius: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  sharePrimaryBtnText: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-  },
-  shareSecondaryBtn: {
-    minHeight: 48,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  shareSecondaryBtnText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
   },
 });

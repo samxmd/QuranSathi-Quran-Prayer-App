@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Feather from "@expo/vector-icons/Feather";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuran } from "@/context/QuranContext";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "@/hooks/useTheme";
 import { toHijri, getIslamicEventLabel } from "@/utils/hijriCalendar";
 import { usePrayerTimes } from "@/hooks/usePrayerTimes";
@@ -37,6 +38,7 @@ export default function PrayerScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { uiLanguage } = useQuran();
+  const { t } = useTranslation();
   
   const {
     location,
@@ -75,7 +77,7 @@ export default function PrayerScreen() {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadText, { color: theme.textSecondary }]}>Finding your location...</Text>
+          <Text style={[styles.loadText, { color: theme.textSecondary }]}>{t("findingLocation")}</Text>
         </View>
       ) : (
         <ScrollView
@@ -147,7 +149,7 @@ export default function PrayerScreen() {
                 <View style={styles.prayerRight}>
                   {isCurrent && (
                     <View style={styles.currentBadge}>
-                      <Text style={styles.currentBadgeText}>Current</Text>
+                      <Text style={styles.currentBadgeText}>{t("current")}</Text>
                     </View>
                   )}
                   {isNext && !isCurrent && (
@@ -185,14 +187,13 @@ export default function PrayerScreen() {
             );
           })}
 
-          {/* Refresh location row */}
           <TouchableOpacity
             style={[styles.refreshBtn, { borderColor: theme.border }]}
             onPress={refreshLocation}
           >
             <Feather name="refresh-cw" size={14} color={theme.textSecondary} />
             <Text style={[styles.refreshText, { color: theme.textSecondary }]}>
-              Update location
+              {t("pullToRefresh")}
             </Text>
           </TouchableOpacity>
 

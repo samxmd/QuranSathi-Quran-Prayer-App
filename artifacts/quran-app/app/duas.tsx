@@ -45,8 +45,11 @@ export default function DuasScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { duaBookmarks, addDuaBookmark, removeDuaBookmark, isDuaBookmarked } = useQuran();
-  const { cat } = useLocalSearchParams<{ cat?: string }>();
+  const { cat, id } = useLocalSearchParams<{ cat?: string; id?: string }>();
   const [selectedCategoryId, setSelectedCategoryId] = useState(cat || DUA_CATEGORIES[0].id);
+  const mainScrollRef = React.useRef<ScrollView>(null);
+  const [cardLayouts, setCardLayouts] = React.useState<Record<string, number>>({});
+  const lastScrolledId = React.useRef<string | null>(null);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [selectedDuaForShare, setSelectedDuaForShare] = useState<DuaItem | null>(null);
 
@@ -58,6 +61,21 @@ export default function DuasScreen() {
       setSelectedCategoryId(cat);
     }
   }, [cat]);
+
+  // Handle auto-scrolling to a specific dua ID
+  React.useEffect(() => {
+    if (id && cardLayouts[id] !== undefined && lastScrolledId.current !== id) {
+      lastScrolledId.current = id;
+      const targetY = cardLayouts[id];
+      // Delay slightly to ensure layout has settled
+      setTimeout(() => {
+        mainScrollRef.current?.scrollTo({
+          y: targetY - 20, // Offset for better visibility
+          animated: true,
+        });
+      }, 150);
+    }
+  }, [id, cardLayouts]);
 
   const selectedCategory = useMemo(
     () => DUA_CATEGORIES.find((category) => category.id === selectedCategoryId) ?? DUA_CATEGORIES[0],
@@ -105,6 +123,7 @@ export default function DuasScreen() {
 
   return (
     <ScrollView
+      ref={mainScrollRef}
       style={[styles.container, { backgroundColor: theme.background }]}
       contentContainerStyle={{ paddingBottom: bottomInset + 100 }}
       showsVerticalScrollIndicator={false}
@@ -113,6 +132,7 @@ export default function DuasScreen() {
         title="Daily Duas"
         arabicTitle="الأدعية اليومية"
         subtitle="Morning, evening, salah, sleep, and Quranic duas in one simple place."
+        showBack
       />
 
       <ScrollView
@@ -170,7 +190,15 @@ export default function DuasScreen() {
           return (
             <View
               key={dua.id}
-              style={[styles.duaCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+              style={[
+                styles.duaCard,
+                { backgroundColor: theme.cardBackground, borderColor: theme.border },
+                id === dua.id && { borderColor: theme.primary, borderWidth: 1.5 }
+              ]}
+              onLayout={(e) => {
+                const layout = e.nativeEvent.layout;
+                setCardLayouts(prev => ({ ...prev, [dua.id]: layout.y + 180 })); // 180 is approx header offset
+              }}
             >
               <View style={styles.duaHeader}>
                 <View style={{ flex: 1 }}>

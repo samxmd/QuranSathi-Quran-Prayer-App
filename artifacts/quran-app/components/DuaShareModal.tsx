@@ -15,9 +15,17 @@ import Feather from "@expo/vector-icons/Feather";
 import ViewShot from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import * as Haptics from "expo-haptics";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { useTheme } from "@/hooks/useTheme";
 import type { DuaItem, DuaCategory } from "@/data/duas";
+
+function sanitizeFilePart(value: string): string {
+  return value
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
 
 interface DuaShareModalProps {
   visible: boolean;
@@ -56,7 +64,11 @@ export function DuaShareModal({ visible, onClose, dua, category }: DuaShareModal
         return;
       }
 
-      await Sharing.shareAsync(captureUri, {
+      const safeTitle = sanitizeFilePart(dua.title) || "dua";
+      const shareUri = `${FileSystem.cacheDirectory}QuranSathi-Dua-${safeTitle}.png`;
+      await FileSystem.copyAsync({ from: captureUri, to: shareUri });
+
+      await Sharing.shareAsync(shareUri, {
         mimeType: "image/png",
         UTI: "public.png",
         dialogTitle: target ? `Share Dua to ${target}` : "Share Dua",

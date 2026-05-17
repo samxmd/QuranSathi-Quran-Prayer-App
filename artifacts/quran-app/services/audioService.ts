@@ -14,7 +14,7 @@ export const RECITERS: Reciter[] = [
   {
     id: "alafasy",
     name: "Mishary Alafasy",
-    arabicName: "مشاري العفاسي",
+    arabicName: "\u0645\u0634\u0627\u0631\u064a \u0627\u0644\u0639\u0641\u0627\u0633\u064a",
     folder: "Alafasy_128kbps",
     style: "Murattal",
     fallbackEdition: "ar.alafasy",
@@ -23,7 +23,7 @@ export const RECITERS: Reciter[] = [
   {
     id: "abdulbasit",
     name: "Abdul Basit",
-    arabicName: "عبد الباسط",
+    arabicName: "\u0639\u0628\u062f \u0627\u0644\u0628\u0627\u0633\u0637",
     folder: "Abdul_Basit_Murattal_192kbps",
     style: "Murattal",
     fallbackEdition: "ar.abdulbasitmurattal",
@@ -32,20 +32,25 @@ export const RECITERS: Reciter[] = [
   {
     id: "hudhaify",
     name: "Ali Al-Hudhaify",
-    arabicName: "علي الحذيفي",
+    arabicName: "\u0639\u0644\u064a \u0627\u0644\u062d\u0630\u064a\u0641\u064a",
     folder: "Hudhaify_128kbps",
     style: "Murattal",
     fallbackEdition: "ar.hudhaify",
     fallbackBitrate: 128,
   },
   {
-    id: "muaiqly",
-    name: "Maher Al-Muaiqly",
-    arabicName: "ماهر المعيقلي",
-    folder: "Maher_Al_Muaiqly_128kbps",
+    id: "maher",
+    name: "Maher Al Muaiqly",
+    arabicName: "\u0645\u0627\u0647\u0631 \u0627\u0644\u0645\u0639\u064a\u0642\u0644\u064a",
+    folder: "MaherAlMuaiqly128kbps",
     style: "Murattal",
-    fallbackEdition: "ar.mahermuaiqly",
-    fallbackBitrate: 128,
+  },
+  {
+    id: "sudais",
+    name: "Abdur-Rahman As-Sudais",
+    arabicName: "\u0639\u0628\u062f \u0627\u0644\u0631\u062d\u0645\u0646 \u0627\u0644\u0633\u062f\u064a\u0633",
+    folder: "Abdurrahmaan_As-Sudais_192kbps",
+    style: "Murattal",
   },
 ];
 
@@ -100,4 +105,14 @@ export function getAyahAudioUrls(
 
 export function getBasmalaUrl(reciter: Reciter = DEFAULT_RECITER): string {
   return getAyahAudioUrl(1, 1, reciter);
+}
+
+export function getFullSurahAudioUrl(
+  surahNumber: number,
+  reciter: Reciter = DEFAULT_RECITER
+): string | null {
+  if (!reciter.fallbackEdition || !reciter.fallbackBitrate) {
+    return null;
+  }
+  return `https://cdn.islamic.network/quran/audio-surah/${reciter.fallbackBitrate}/${reciter.fallbackEdition}/${surahNumber}.mp3`;
 }

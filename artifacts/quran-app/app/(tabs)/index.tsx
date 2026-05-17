@@ -15,37 +15,46 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Feather from "@expo/vector-icons/Feather";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import Svg, { Circle } from "react-native-svg";
 import * as Haptics from "expo-haptics";
 
 import { SURAHS } from "@/data/surahs";
 import { useQuran } from "@/context/QuranContext";
+import { useReadingPlan } from "@/hooks/useReadingPlan";
+import { TodayReadingCard } from "@/components/TodayReadingCard";
+import { ReadingPlanCTA } from "@/components/ReadingPlanCTA";
 import { useDailyAyah } from "@/hooks/useDailyAyah";
 import { usePrayerTimes } from "@/hooks/usePrayerTimes";
 import { useTheme } from "@/hooks/useTheme";
-import { type UiLanguage, UI_TEXT } from "@/services/i18n";
+import { useTranslation } from "react-i18next";
+import { type UiLanguage } from "@/services/i18n";
 import { prefetchSurahAyahs } from "@/services/quranApi";
 import { getIslamicEventLabel, toHijri } from "@/utils/hijriCalendar";
 import { Skeleton } from "@/components/Skeleton";
-
+import { TranslationText } from "@/components/TranslationText";
 const FEATURED_SURAHS = [1, 36, 55, 67, 97, 112, 113, 114];
 
-function getGreeting(uiLanguage: UiLanguage, t: typeof UI_TEXT.en): { arabic: string; localized: string } {
+function getGreeting(t: any): { arabic: string; localized: string } {
   const hour = new Date().getHours();
-  if (hour < 5) return { arabic: "السلام عليكم", localized: t.greetingNight };
-  if (hour < 12) return { arabic: "السلام عليكم", localized: t.greetingMorning };
-  if (hour < 17) return { arabic: "السلام عليكم", localized: t.greetingAfternoon };
-  if (hour < 20) return { arabic: "السلام عليكم", localized: t.greetingEvening };
-  return { arabic: "السلام عليكم", localized: t.greetingNight };
+  if (hour >= 5 && hour < 12) return { arabic: "بِسْمِ اللَّهِ", localized: t("greetingMorning") };
+  if (hour >= 12 && hour < 17) return { arabic: "الْحَمْدُ لِلَّهِ", localized: t("greetingAfternoon") };
+  if (hour >= 17 && hour < 21) return { arabic: "سُبْحَانَ اللَّهِ", localized: t("greetingEvening") };
+  return { arabic: "السَّلَامُ عَلَيْكُمْ", localized: t("greetingNight") };
 }
 
 export default function HomeScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { lastRead, readSurahIds, streak, uiLanguage, isLoading: contextLoading } = useQuran();
+  const { 
+    lastRead, readSurahIds, streak, totalTimeToday, 
+    uiLanguage, enabledLanguages, isLoading: contextLoading,
+    totalAyahsRead, totalHasanat
+  } = useQuran();
+  const { plan: activePlan } = useReadingPlan();
   const [startupTasksReady, setStartupTasksReady] = React.useState(false);
   const { ayah: dailyAyah, loading: dailyLoading } = useDailyAyah(startupTasksReady);
   const { nextPrayer, countdown, loading: prayerLoading } = usePrayerTimes(startupTasksReady);
-  const t = UI_TEXT[uiLanguage];
+  const { t } = useTranslation();
 
   const topInset = Platform.OS === "web"
     ? 20
@@ -53,7 +62,7 @@ export default function HomeScreen() {
       ? Math.max(insets.top, NativeStatusBar.currentHeight ?? 0)
       : insets.top;
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
-  const greeting = useMemo(() => getGreeting(uiLanguage, t), [uiLanguage, t]);
+  const greeting = useMemo(() => getGreeting(t), [t]);
   const featuredSurahs = FEATURED_SURAHS.map((id) =>
     SURAHS.find((surah) => surah.id === id)!
   ).filter(Boolean);
@@ -81,7 +90,7 @@ export default function HomeScreen() {
     );
 
     likelySurahs.forEach((surahId) => {
-      prefetchSurahAyahs(surahId);
+      prefetchSurahAyahs(surahId, enabledLanguages);
     });
   }, [lastRead?.surahId, startupTasksReady]);
 
@@ -90,76 +99,122 @@ export default function HomeScreen() {
 
   const gradColors = theme.isDark ? [theme.gradientStart, theme.gradientEnd] as [string, string] : [theme.gradientStart, theme.gradientEnd] as [string, string];
 
-  const renderProgressTracker = () => (
-    <View style={[styles.progressCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-      <View style={styles.progressRingWrap}>
-        <View style={[styles.progressRingTrack, { borderColor: theme.cardBackground }]} />
-        <View
-          style={[
-            styles.progressRingFill,
-            {
-              borderColor: theme.primary,
-              transform: [{ rotate: `${progressPct * 3.6}deg` }],
-            },
-          ]}
-        />
-        <View style={styles.progressRingCenter}>
-          <Text style={[styles.progressPct, { color: theme.primary }]}>{progressPct}%</Text>
-          <Text style={[styles.progressPctLabel, { color: theme.textSecondary }]}>Done</Text>
-        </View>
-      </View>
+  const formatTotalTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const hrs = Math.floor(mins / 60);
+    const m = mins % 60;
+    const s = seconds % 60;
+    if (hrs > 0) return `${hrs}h ${m}m`;
+    if (mins > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
 
-      <View style={styles.progressStats}>
-        <View style={styles.progressStatRow}>
-          <View style={styles.progressStatIconBox}>
-            <View style={[styles.progressStatDot, { backgroundColor: theme.primary }]} />
+  const renderProgressTracker = () => {
+    const size = 140; // Increased size
+    const strokeWidth = 10;
+    const radius = (size - strokeWidth) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (progressPct / 100) * circumference;
+
+    return (
+      <View style={styles.heroSectionContent}>
+        {/* Progress Hero */}
+        <View style={styles.heroCircleContainer}>
+          <Svg width={size} height={size}>
+            <Circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke={theme.isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.04)"}
+              strokeWidth={strokeWidth}
+              fill="transparent"
+            />
+            <Circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke={theme.primary}
+              strokeWidth={strokeWidth}
+              fill="transparent"
+              strokeDasharray={`${circumference} ${circumference}`}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+              transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            />
+          </Svg>
+          <View style={styles.heroCircleCenter}>
+            <Text style={[styles.heroPctText, { color: theme.textPrimary }]}>{progressPct}%</Text>
+            <Text style={[styles.heroPctLabel, { color: theme.textSecondary }]}>{t("completed")}</Text>
           </View>
-          <Text style={[styles.progressStatNum, { color: theme.textPrimary }]}>{readCount}</Text>
-          <Text style={[styles.progressStatLabel, { color: theme.textSecondary }]}>Surahs read</Text>
         </View>
-        <View style={styles.progressStatRow}>
-          <View style={styles.progressStatIconBox}>
-            <View style={[styles.progressStatDot, { backgroundColor: theme.border }]} />
+
+        {/* Stats Group */}
+        <View style={styles.heroStatsGroup}>
+          <View style={styles.heroStatRow}>
+            <Text style={[styles.heroStatLabel, { color: theme.textSecondary }]}>{t("surahsRead")}: </Text>
+            <Text style={[styles.heroStatValue, { color: theme.textPrimary }]}>{readCount}</Text>
           </View>
-          <Text style={[styles.progressStatNum, { color: theme.textPrimary }]}>{114 - readCount}</Text>
-          <Text style={[styles.progressStatLabel, { color: theme.textSecondary }]}>Remaining</Text>
-        </View>
-        {streak > 0 && (
-          <View style={styles.progressStatRow}>
-            <View style={styles.progressStatIconBox}>
-              <Text style={styles.progressStatEmoji}>🔥</Text>
+          <View style={styles.heroStatRow}>
+            <Text style={[styles.heroStatValue, { color: theme.textPrimary }]}>{114 - readCount} </Text>
+            <Text style={[styles.heroStatLabel, { color: theme.textSecondary }]}>{t("surahsLeft")}</Text>
+          </View>
+          {streak > 0 && (
+            <View style={styles.heroStatRow}>
+              <Text style={styles.heroStatEmoji}>🔥 </Text>
+              <Text style={[styles.heroStatValue, { color: theme.textPrimary }]}>{streak} </Text>
+              <Text style={[styles.heroStatLabel, { color: theme.textSecondary }]}>{t("dayStreak")}</Text>
             </View>
-            <Text style={[styles.progressStatNum, { color: theme.textPrimary }]}>{streak}</Text>
-            <Text style={[styles.progressStatLabel, { color: theme.textSecondary }]}>Day streak</Text>
-          </View>
-        )}
-        <View style={styles.milestoneRow}>
-          <View style={[styles.milestoneLine, { backgroundColor: theme.cardBackground, flex: 1 }]}>
-            <View
-              style={[
-                styles.milestoneFill,
-                { backgroundColor: theme.primary, width: `${progressPct}%` as any },
-              ]}
-            />
-          </View>
-          {[25, 50, 75].map((m) => (
-            <View
-              key={m}
-              style={[
-                styles.milestoneMark,
-                { backgroundColor: readCount >= Math.round((m / 100) * 114) ? theme.primary : theme.border },
-              ]}
-            />
-          ))}
+          )}
         </View>
-        <View style={styles.milestoneLabels}>
-          {["25%", "50%", "75%", "100%"].map((l) => (
-            <Text key={l} style={[styles.milestoneLabelText, { color: theme.textSecondary }]}>{l}</Text>
-          ))}
+
+        {/* Minimal Progress Bar */}
+        <View style={styles.minimalProgressContainer}>
+          <Text style={[styles.minimalProgressLabel, { color: theme.textSecondary }]}>{t("quranProgress")}</Text>
+          <View style={[styles.minimalProgressBarTrack, { backgroundColor: theme.isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)" }]}>
+            <View style={[styles.minimalProgressBarFill, { backgroundColor: theme.primary, width: `${progressPct}%` }]} />
+          </View>
+          <Text style={[styles.minimalProgressPct, { color: theme.primary }]}>{progressPct}%</Text>
+        </View>
+
+        {/* Motivational Line */}
+        <Text style={[styles.motivationalLine, { color: theme.textSecondary }]}>
+          {t("motivationalText")}
+        </Text>
+      </View>
+    );
+  };
+
+  const renderImpactStats = () => {
+    const formatNumber = (num: number) => {
+      if (num >= 1000000) return `${(num / 1000000).toFixed(1)}m`;
+      if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
+      return num.toString();
+    };
+
+    return (
+      <View style={styles.homeImpactGrid}>
+        <View style={styles.homeImpactItem}>
+          <View style={[styles.impactIconCircleSmall, { backgroundColor: "#FF6B6B10" }]}>
+            <Feather name="book-open" size={12} color="#FF6B6B" />
+          </View>
+          <View style={styles.impactTextContainer}>
+            <Text style={[styles.impactValueLarge, { color: theme.textPrimary }]}>{totalAyahsRead}</Text>
+            <Text style={[styles.impactLabelSmall, { color: theme.textSecondary }]}>{t("statsVerses")}</Text>
+          </View>
+        </View>
+        <View style={styles.impactDivider} />
+        <View style={styles.homeImpactItem}>
+          <View style={[styles.impactIconCircleSmall, { backgroundColor: "#FFD93D10" }]}>
+            <Feather name="heart" size={12} color="#FFD93D" />
+          </View>
+          <View style={styles.impactTextContainer}>
+            <Text style={[styles.impactValueLarge, { color: theme.textPrimary }]}>{formatNumber(totalHasanat)}</Text>
+            <Text style={[styles.impactLabelSmall, { color: theme.textSecondary }]}>{t("statsHasanat")}</Text>
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <ScrollView
@@ -193,7 +248,7 @@ export default function HomeScreen() {
 
         {streak > 0 && (
           <View style={styles.streakChip}>
-            <Text style={styles.streakText}>🔥 {streak} {t.dayStreak.toLowerCase()}</Text>
+            <Text style={styles.streakText}>🔥 {streak} {t("dayStreak").toLowerCase()}</Text>
           </View>
         )}
 
@@ -218,7 +273,7 @@ export default function HomeScreen() {
           activeOpacity={0.85}
         >
           <Feather name="search" size={16} color="rgba(255,255,255,0.6)" />
-          <Text style={styles.heroSearchText}>{t.searchSurahs}...</Text>
+          <Text style={styles.heroSearchText}>{t("searchSurahs")}</Text>
         </TouchableOpacity>
       </LinearGradient>
 
@@ -241,34 +296,88 @@ export default function HomeScreen() {
 
           <View style={styles.prayerInfo}>
             <Text style={[styles.prayerLabel, { color: theme.textSecondary }]}>
-              {t.nextPrayer}
+              {t("nextPrayer")}
             </Text>
             <Text style={[styles.prayerName, { color: theme.textPrimary }]}>{nextPrayer.name}</Text>
           </View>
 
           <View style={styles.prayerTimeCol}>
-            <Text style={[styles.prayerTimer, { color: theme.primary }]}>{countdown}</Text>
-            <Text style={[styles.prayerAt, { color: theme.textSecondary }]}>
+            <Text style={[styles.prayerTimer, { color: theme.primary }]}>
               {nextPrayer.time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </Text>
+            <Text style={[styles.prayerAt, { color: theme.textSecondary }]}>
+              in {countdown}
             </Text>
           </View>
         </TouchableOpacity>
       )}
 
-      {contextLoading ? (
-        <View style={styles.section}>
-          <Skeleton height={20} width={150} style={{ marginBottom: 16 }} />
-          <Skeleton height={126} radius={24} style={{ marginBottom: 16 }} />
-          <Skeleton height={120} radius={20} />
+      {/* ── DAILY AYAH (Higher Hierarchy) ────────────────────────── */}
+      <View style={styles.section}>
+        <View style={styles.sectionTitleRowContainerLine}>
+          <View style={[styles.verticalBar, { backgroundColor: theme.primary }]} />
+          <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>{t("dailyAyah")}</Text>
         </View>
-      ) : lastRead ? (
-        <View style={styles.section}>
-          <View style={styles.sectionTitleRowContainer}>
-            <View style={[styles.verticalBar, { backgroundColor: theme.primary }]} />
-            <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>{t.continueReading}</Text>
+        <View style={[styles.dailyCard, { backgroundColor: theme.cardBackground, borderColor: theme.accent }]}>
+          <View style={[styles.dailyCardCurve, { borderColor: theme.accent }]} />
+
+          <View style={[styles.verseBadge, { backgroundColor: theme.accent + "20" }]}>
+            <MaterialCommunityIcons name="star-crescent" size={13} color={theme.accent} />
+            <Text style={[styles.verseBadgeText, { color: theme.textSecondary }]}>QURANSATHI — AYAH OF THE DAY</Text>
           </View>
+
+          {dailyLoading || !startupTasksReady ? (
+            <View style={{ gap: 12 }}>
+              <Skeleton height={28} style={{ marginVertical: 10 }} />
+              <Skeleton height={20} width="80%" />
+              <Skeleton height={20} width="95%" />
+              <Skeleton height={20} width="40%" style={{ marginTop: 10 }} />
+            </View>
+          ) : dailyAyah ? (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                const [surahId, ayahNum] = dailyAyah.reference.split(":");
+                router.push({
+                  pathname: "/reader/[id]",
+                  params: { id: Number(surahId), ayah: Number(ayahNum) }
+                });
+              }}
+            >
+              <Text style={[styles.dailyArabic, { color: theme.textPrimary }]}>{dailyAyah.arabic}</Text>
+              <TranslationText
+                text={`"${dailyAyah[uiLanguage === "bn" ? "bangla" : uiLanguage === "ne" ? "nepali" : "english"]}"`}
+                languageCode={uiLanguage}
+                baseFontSize={15}
+                color={theme.textSecondary}
+                style={styles.dailyTranslation}
+              />
+              <View style={[styles.dailyRefContainer, { borderTopColor: theme.border }]}>
+                <Text style={[styles.dailyRef, { color: theme.primary }]}>
+                  {dailyAyah.surahName} {dailyAyah.reference}
+                </Text>
+                <Feather name="arrow-right" size={14} color={theme.primary} />
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.dailyTranslation, { color: theme.textSecondary }]}>{t("couldNotLoadAyah")}</Text>
+          )}
+        </View>
+      </View>
+
+      {/* ── MY PROGRESS SECTION ───────────────────────────── */}
+      <View style={styles.section}>
+        <View style={styles.sectionTitleRowContainerLine}>
+          <View style={[styles.verticalBar, { backgroundColor: theme.primary }]} />
+          <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>{t("lastRead")}</Text>
+        </View>
+
+        {contextLoading ? (
+          <Skeleton height={126} radius={24} style={{ marginTop: 16 }} />
+        ) : lastRead ? (
           <TouchableOpacity
-            style={[styles.continueReadCard, { backgroundColor: theme.primary }]}
+            style={[styles.continueReadCard, { backgroundColor: theme.primary, marginTop: 16 }]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
               router.push({
@@ -279,93 +388,17 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <View style={styles.continueCardLeft}>
-              <Text style={styles.continueCardLabel}>{t.lastRead}</Text>
+              <Text style={styles.continueCardLabel}>{t("lastRead")}</Text>
               <Text style={styles.continueCardSurah}>{lastRead.surahName}</Text>
-              <Text style={styles.continueCardAyah}>{t.ayah} {lastRead.ayahNumber}</Text>
+              <Text style={styles.continueCardAyah}>{t("ayah")} {lastRead.ayahNumber}</Text>
             </View>
             <View style={styles.continueIconCircle}>
               <Feather name="book-open" size={26} color="#FFFFFF" />
             </View>
           </TouchableOpacity>
-
-          <View style={[styles.progressCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
-            <View style={styles.progressRingWrap}>
-              <View style={[styles.progressRingTrack, { borderColor: theme.cardBackground }]} />
-              <View
-                style={[
-                  styles.progressRingFill,
-                  {
-                    borderColor: theme.primary,
-                    transform: [{ rotate: `${progressPct * 3.6}deg` }],
-                  },
-                ]}
-              />
-              <View style={styles.progressRingCenter}>
-                <Text style={[styles.progressPct, { color: theme.primary }]}>{progressPct}%</Text>
-                <Text style={[styles.progressPctLabel, { color: theme.textSecondary }]}>Done</Text>
-              </View>
-            </View>
-
-            <View style={styles.progressStats}>
-              <View style={styles.progressStatRow}>
-                <View style={styles.progressStatIconBox}>
-                  <View style={[styles.progressStatDot, { backgroundColor: theme.primary }]} />
-                </View>
-                <Text style={[styles.progressStatNum, { color: theme.textPrimary }]}>{readCount}</Text>
-                <Text style={[styles.progressStatLabel, { color: theme.textSecondary }]}>Surahs read</Text>
-              </View>
-              <View style={styles.progressStatRow}>
-                <View style={styles.progressStatIconBox}>
-                  <View style={[styles.progressStatDot, { backgroundColor: theme.border }]} />
-                </View>
-                <Text style={[styles.progressStatNum, { color: theme.textPrimary }]}>{114 - readCount}</Text>
-                <Text style={[styles.progressStatLabel, { color: theme.textSecondary }]}>Remaining</Text>
-              </View>
-              {streak > 0 && (
-                <View style={styles.progressStatRow}>
-                  <View style={styles.progressStatIconBox}>
-                    <Text style={styles.progressStatEmoji}>🔥</Text>
-                  </View>
-                  <Text style={[styles.progressStatNum, { color: theme.textPrimary }]}>{streak}</Text>
-                  <Text style={[styles.progressStatLabel, { color: theme.textSecondary }]}>Day streak</Text>
-                </View>
-              )}
-
-              <View style={styles.milestoneRow}>
-                <View style={[styles.milestoneLine, { backgroundColor: theme.cardBackground, flex: 1 }]}>
-                  <View
-                    style={[
-                      styles.milestoneFill,
-                      { backgroundColor: theme.primary, width: `${progressPct}%` as any },
-                    ]}
-                  />
-                </View>
-                {[25, 50, 75].map((m) => (
-                  <View
-                    key={m}
-                    style={[
-                      styles.milestoneMark,
-                      { backgroundColor: readCount >= Math.round((m / 100) * 114) ? theme.primary : theme.border },
-                    ]}
-                  />
-                ))}
-              </View>
-              <View style={styles.milestoneLabels}>
-                {["25%", "50%", "75%", "100%"].map((l) => (
-                  <Text key={l} style={[styles.milestoneLabelText, { color: theme.textSecondary }]}>{l}</Text>
-                ))}
-              </View>
-            </View>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.section}>
-          <View style={styles.sectionTitleRowContainer}>
-            <View style={[styles.verticalBar, { backgroundColor: theme.primary }]} />
-            <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>{t.continueReading}</Text>
-          </View>
+        ) : (
           <TouchableOpacity
-            style={[styles.continueReadCard, { backgroundColor: theme.primary }]}
+            style={[styles.continueReadCard, { backgroundColor: theme.primary, marginTop: 16 }]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
               router.push({ pathname: "/reader/[id]", params: { id: 1 } });
@@ -373,40 +406,104 @@ export default function HomeScreen() {
             activeOpacity={0.9}
           >
             <View style={styles.continueCardLeft}>
-              <Text style={styles.continueCardLabel}>WELCOME</Text>
-              <Text style={styles.continueCardSurah}>Start Journey</Text>
-              <Text style={styles.continueCardAyah}>Begin with Al-Fatihah</Text>
+              <Text style={styles.continueCardLabel}>{t("welcome")}</Text>
+              <Text style={styles.continueCardSurah}>{t("startJourney")}</Text>
+              <Text style={styles.continueCardAyah}>{t("beginWithAlFatihah")}</Text>
             </View>
             <View style={styles.continueIconCircle}>
               <Feather name="book" size={26} color="#FFFFFF" />
             </View>
           </TouchableOpacity>
-        </View>
-      )}
-
-      {!contextLoading && !lastRead && (
-        <View style={styles.section}>
-          <View style={styles.sectionTitleRowContainerLine}>
-            <View style={[styles.verticalBar, { backgroundColor: theme.primary }]} />
-            <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>Daily Progress</Text>
-          </View>
-          {renderProgressTracker()}
-        </View>
-      )}
+        )}
+      </View>
 
       <View style={styles.section}>
         <View style={styles.sectionTitleRowContainerLine}>
           <View style={[styles.verticalBar, { backgroundColor: theme.primary }]} />
-          <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>{t.quickAccess}</Text>
+          <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>
+            {t("myProgress", "My Progress")}
+          </Text>
+        </View>
+
+        {contextLoading ? (
+          <View style={{ marginTop: 16 }}>
+            <Skeleton height={126} radius={24} style={{ marginBottom: 16 }} />
+            <Skeleton height={200} radius={24} />
+          </View>
+        ) : (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => router.push("/stats")}
+            style={[styles.unifiedProgressCard, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+          >
+            {renderImpactStats()}
+            <View style={[styles.unifiedDivider, { backgroundColor: theme.border }]} />
+            {renderProgressTracker()}
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionTitleRowContainerLine}>
+          <View style={[styles.verticalBar, { backgroundColor: theme.primary }]} />
+          <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>{t("readingPlan")}</Text>
+        </View>
+        {activePlan ? <TodayReadingCard /> : <ReadingPlanCTA />}
+      </View>
+
+
+
+      <View style={styles.section}>
+        <View style={styles.sectionTitleRowContainerLine}>
+          <View style={[styles.verticalBar, { backgroundColor: theme.primary }]} />
+          <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>{t("spiritualHub")}</Text>
+        </View>
+        <TouchableOpacity
+          activeOpacity={0.88}
+          onPress={() => router.push("/spiritual-hub")}
+          style={{ borderRadius: 20, overflow: "hidden", marginTop: 16 }}
+        >
+          <LinearGradient
+            colors={["#4CAF5022", "#2196F314"]}
+            style={{
+              borderRadius: 20,
+              borderWidth: 1,
+              borderColor: "#4CAF5044",
+              padding: 18,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 14,
+            }}
+          >
+            <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: "#4CAF5018", alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontSize: 28 }}>🌿</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: theme.textPrimary, marginBottom: 4 }}>
+                {t("spiritualHub")}
+              </Text>
+              <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: theme.textSecondary, lineHeight: 18 }}>
+                {t("spiritualHubDesc")}
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={20} color={theme.textSecondary} />
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionTitleRowContainerLine}>
+          <View style={[styles.verticalBar, { backgroundColor: theme.primary }]} />
+          <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>{t("quickAccess")}</Text>
         </View>
         <View style={styles.quickAccessGrid}>
           {[
-            { icon: "book-open-variant", label: t.surahs, route: "/(tabs)/surahs", color: theme.primary, bg: theme.cardBackground },
-            { icon: "compass-outline", label: t.qibla, route: "/qibla", color: theme.accent, bg: theme.accent + "20" },
-            { icon: "bookmark-check-outline", label: t.bookmarks, route: "/favorites", color: theme.primary, bg: theme.cardBackground },
-            { icon: "dots-horizontal-circle-outline", label: t.dhikr, route: "/dhikr", color: "#6A1B9A", bg: theme.isDark ? "#3B1466" : "#F3E5F5" },
-            { icon: "book-open-page-variant", label: t.tafsir, route: "/tafsir", color: "#7B4FCC", bg: theme.isDark ? "#2A1A4A" : "#F0E8FF" },
-            { icon: "view-grid-outline", label: "Tools", route: "/(tabs)/utilities", color: theme.accent, bg: theme.accent + "20" },
+            { icon: "book-open-variant", label: t("surahs"), route: "/(tabs)/surahs", color: theme.primary, bg: theme.cardBackground },
+            { icon: "compass-outline", label: t("qibla"), route: "/qibla", color: theme.accent, bg: theme.accent + "20" },
+            { icon: "bookmark-check-outline", label: t("bookmarks"), route: "/favorites", color: theme.primary, bg: theme.cardBackground },
+            { icon: "dots-horizontal-circle-outline", label: t("dhikr"), route: "/dhikr", color: "#6A1B9A", bg: theme.isDark ? "#3B1466" : "#F3E5F5" },
+            { icon: "book-open-page-variant", label: t("tafsir"), route: "/tafsir", color: "#7B4FCC", bg: theme.isDark ? "#2A1A4A" : "#F0E8FF" },
+            { icon: "view-grid-outline", label: t("tools"), route: "/(tabs)/utilities", color: theme.accent, bg: theme.accent + "20" },
           ].map((item) => (
             <TouchableOpacity
               key={item.label}
@@ -426,62 +523,16 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <View style={styles.section}>
-        <View style={styles.sectionTitleRowContainerLine}>
-          <View style={[styles.verticalBar, { backgroundColor: theme.primary }]} />
-          <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>{t.dailyAyah}</Text>
-        </View>
-        <View style={[styles.dailyCard, { backgroundColor: theme.cardBackground, borderColor: theme.accent }]}>
-          <View style={[styles.dailyCardCurve, { borderColor: theme.accent }]} />
 
-          <View style={[styles.verseBadge, { backgroundColor: theme.accent + "20" }]}>
-            <MaterialCommunityIcons name="star-crescent" size={13} color={theme.accent} />
-            <Text style={[styles.verseBadgeText, { color: theme.textSecondary }]}>QURANSATHI — AYAH OF THE DAY</Text>
-          </View>
-
-          {dailyLoading || !startupTasksReady ? (
-            <View style={{ gap: 12 }}>
-              <Skeleton height={28} style={{ marginVertical: 10 }} />
-              <Skeleton height={20} width="80%" />
-              <Skeleton height={20} width="95%" />
-              <Skeleton height={20} width="40%" style={{ marginTop: 10 }} />
-            </View>
-          ) : dailyAyah ? (
-            <View>
-              <Text style={[styles.dailyArabic, { color: theme.textPrimary }]}>{dailyAyah.arabic}</Text>
-              <Text style={[styles.dailyTranslation, { color: theme.textSecondary }]}>
-                "{dailyAyah[uiLanguage === "bn" ? "bangla" : uiLanguage === "ne" ? "nepali" : "english"]}"
-              </Text>
-              <TouchableOpacity
-                style={[styles.dailyRefContainer, { borderTopColor: theme.border }]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  router.push({
-                    pathname: "/reader/[id]",
-                    params: { id: Number(dailyAyah.reference.split(":")[0]) }
-                  });
-                }}
-              >
-                <Text style={[styles.dailyRef, { color: theme.primary }]}>
-                  {dailyAyah.surahName} {dailyAyah.reference}
-                </Text>
-                <Feather name="arrow-right" size={14} color={theme.primary} />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <Text style={[styles.dailyTranslation, { color: theme.textSecondary }]}>{t.couldNotLoadAyah}</Text>
-          )}
-        </View>
-      </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRowContainerLine}>
             <View style={[styles.verticalBar, { backgroundColor: theme.primary }]} />
-            <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>{t.featuredSurahs}</Text>
+            <Text style={[styles.sectionTitleText, { color: theme.textPrimary }]}>{t("featuredSurahs")}</Text>
           </View>
           <TouchableOpacity onPress={() => router.push("/(tabs)/surahs")}>
-            <Text style={[styles.seeAll, { color: theme.primary }]}>{t.seeAll}</Text>
+            <Text style={[styles.seeAll, { color: theme.primary }]}>{t("seeAll")}</Text>
           </TouchableOpacity>
         </View>
         <ScrollView
@@ -558,11 +609,11 @@ const styles = StyleSheet.create({
   headerDecorCircle3: { position: "absolute", top: -45, right: -45, width: 120, height: 120, borderRadius: 60, borderWidth: 1, borderColor: "rgba(255,255,255,0.04)" },
   settingsIconBtn: { position: "absolute", right: 24, top: 40, zIndex: 10 },
   settingsCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
-  greetingArabic: { fontSize: 36, fontFamily: "Inter_400Regular", color: "#FFFFFF", marginTop: 24, textAlign: "center", width: "100%" },
+  greetingArabic: { fontSize: 42, fontFamily: "ScheherazadeNew_400Regular", color: "#FFFFFF", marginTop: 24, textAlign: "center", width: "100%" },
   greetingNepali: { fontSize: 16, fontFamily: "Inter_500Medium", color: "#FFFFFF", marginBottom: 12, textAlign: "center", width: "100%" },
   thinLine: { width: "12%", height: 1, backgroundColor: "rgba(255,255,255,0.4)", marginVertical: 6, alignSelf: "center" },
   bismillahBox: { marginTop: 4, marginBottom: 12, width: "100%", alignItems: "center" },
-  bismillahArabic: { fontSize: 20, fontFamily: "Inter_400Regular", color: "rgba(255,255,255,0.85)", textAlign: "center" },
+  bismillahArabic: { fontSize: 26, fontFamily: "ScheherazadeNew_400Regular", color: "rgba(255,255,255,0.85)", textAlign: "center" },
   hijriChip: { backgroundColor: "rgba(205,180,194,0.15)", borderRadius: 24, paddingHorizontal: 16, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(205,180,122,0.4)", marginBottom: 8, alignSelf: "center" },
   hijriDateText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: "#FFEEA6" },
   streakChip: { backgroundColor: "rgba(255,150,0,0.2)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 4, borderWidth: 1, borderColor: "rgba(255,150,0,0.5)", marginBottom: 10, alignSelf: "center" },
@@ -668,19 +719,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     position: "relative", flexShrink: 0, marginTop: 2,
   },
-  progressRingTrack: {
-    position: "absolute",
-    width: 84, height: 84, borderRadius: 42,
-    borderWidth: 7,
-  },
-  progressRingFill: {
-    position: "absolute",
-    width: 84, height: 84, borderRadius: 42,
-    borderWidth: 7,
-    borderBottomColor: "transparent",
-    borderLeftColor: "transparent",
-  },
-  progressRingCenter: { alignItems: "center", gap: 0 },
+  progressRingCenter: { position: "absolute", alignItems: "center", gap: 0 },
   progressPct: { fontSize: 20, fontFamily: "Inter_700Bold" },
   progressPctLabel: { fontSize: 10, fontFamily: "Inter_500Medium" },
   progressStats: { flex: 1, gap: 8, paddingTop: 2 },
@@ -690,11 +729,12 @@ const styles = StyleSheet.create({
   progressStatEmoji: { fontSize: 14 },
   progressStatNum: { fontSize: 16, fontFamily: "Inter_700Bold", width: 36 },
   progressStatLabel: { fontSize: 12, fontFamily: "Inter_400Regular", flexShrink: 1 },
-  milestoneRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 0 },
-  milestoneLine: { height: 4, borderRadius: 2, overflow: "hidden", position: "relative" },
+  milestoneContainer: { height: 16, justifyContent: "center", position: "relative", marginTop: 4 },
+  milestoneLine: { height: 4, borderRadius: 2, overflow: "hidden", width: "100%" },
   milestoneFill: { position: "absolute", left: 0, top: 0, height: 4, borderRadius: 2 },
-  milestoneMark: { width: 8, height: 8, borderRadius: 4, marginLeft: -4 },
-  milestoneLabels: { flexDirection: "row", justifyContent: "space-between", marginTop: 3 },
+  milestoneMark: { position: "absolute", width: 8, height: 8, borderRadius: 4, marginLeft: -4 },
+  milestoneLabels: { height: 14, position: "relative", marginTop: 2 },
+  milestoneLabelWrapper: { position: "absolute", width: 40, marginLeft: -20, alignItems: "center" },
   milestoneLabelText: { fontSize: 9, fontFamily: "Inter_500Medium" },
   section: {
     paddingHorizontal: 20,
@@ -748,7 +788,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   featuredNumberText: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  featuredArabic: { fontSize: 20, fontFamily: "Inter_400Regular", flex: 1, textAlign: "right" },
+  featuredArabic: { fontSize: 22, fontFamily: "ScheherazadeNew_400Regular", flex: 1, textAlign: "right" },
   featuredEnglish: { fontSize: 15, fontFamily: "Inter_700Bold", paddingHorizontal: 14, marginBottom: 2 },
   featuredMeaning: { fontSize: 11, fontFamily: "Inter_400Regular", paddingHorizontal: 14, fontStyle: "italic" },
   featuredDivider: { height: StyleSheet.hairlineWidth, marginHorizontal: 14, marginVertical: 10 },
@@ -760,8 +800,142 @@ const styles = StyleSheet.create({
   dailyCardCurve: { position: "absolute", top: -15, right: -15, width: 60, height: 60, borderRadius: 30, borderWidth: 1 },
   verseBadge: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, marginBottom: 20 },
   verseBadgeText: { fontSize: 10, fontFamily: "Inter_700Bold" },
-  dailyArabic: { fontSize: 28, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 52, marginVertical: 16 },
+  dailyArabic: { fontSize: 32, fontFamily: "ScheherazadeNew_400Regular", textAlign: "center", lineHeight: 58, marginVertical: 16 },
   dailyTranslation: { fontSize: 15, fontFamily: "Inter_400Regular", textAlign: "left", fontStyle: "italic", lineHeight: 24, marginBottom: 16 },
   dailyRefContainer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 16, borderTopWidth: 1 },
   dailyRef: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  unifiedProgressCard: {
+    marginTop: 16,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    ...Platform.select({
+      web: { boxShadow: "0px 4px 16px rgba(0,0,0,0.06)" } as any,
+      native: { shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+    }),
+  },
+  unifiedDivider: {
+    height: 1,
+    width: "100%",
+    marginVertical: 20,
+    opacity: 0.5,
+  },
+  homeImpactGrid: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  homeImpactItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  impactIconCircleSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  impactTextContainer: {
+    gap: 1,
+  },
+  impactValueLarge: {
+    fontSize: 22,
+    fontFamily: "Inter_800ExtraBold",
+  },
+  impactLabelSmall: {
+    fontSize: 11,
+    fontFamily: "Inter_500Medium",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    opacity: 0.8,
+  },
+  impactDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: "rgba(0,0,0,0.06)",
+  },
+  heroSectionContent: {
+    alignItems: "center",
+    gap: 24,
+  },
+  heroCircleContainer: {
+    width: 140,
+    height: 140,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  heroCircleCenter: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroPctText: {
+    fontSize: 32,
+    fontFamily: "Inter_800ExtraBold",
+  },
+  heroPctLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    marginTop: -2,
+    opacity: 0.8,
+  },
+  heroStatsGroup: {
+    width: "100%",
+    gap: 8,
+    alignItems: "center",
+  },
+  heroStatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  heroStatLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+  },
+  heroStatValue: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  heroStatEmoji: {
+    fontSize: 16,
+  },
+  minimalProgressContainer: {
+    width: "100%",
+    gap: 8,
+    marginTop: 8,
+  },
+  minimalProgressLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  minimalProgressBarTrack: {
+    height: 6,
+    borderRadius: 3,
+    width: "100%",
+    overflow: "hidden",
+  },
+  minimalProgressBarFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  minimalProgressPct: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    alignSelf: "flex-end",
+  },
+  motivationalLine: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    fontStyle: "italic",
+    textAlign: "center",
+    opacity: 0.8,
+    marginTop: 4,
+  },
 });

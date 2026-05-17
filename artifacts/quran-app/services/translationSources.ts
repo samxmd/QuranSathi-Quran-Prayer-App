@@ -17,8 +17,14 @@ export const TRANSLATION_SOURCES = {
     label: "বাংলা",
     sourceLabel: "Muhiuddin Khan",
   },
+  hi: {
+    api: "fawazahmed0",
+    edition: "hin-muhammadfarooqk",
+    label: "हिन्दी",
+    sourceLabel: "Muhammad Farooq Khan & Muhammad Ahmed",
+  },
 } as const;
 
-export type TranslationLanguage = keyof typeof TRANSLATION_SOURCES;
+export type TranslationLanguage = keyof typeof TRANSLATION_SOURCES | (string & {});
 
-export const DEFAULT_ENABLED_LANGUAGES: TranslationLanguage[] = ["en", "ne", "bn"];
+export const DEFAULT_ENABLED_LANGUAGES: TranslationLanguage[] = ["en"];

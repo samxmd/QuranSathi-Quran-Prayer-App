@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "871866761507",
+    "project_id": "quransathi-df617",
+    "storage_bucket": "quransathi-df617.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:871866761507:android:b2e8c1702e3bf7844a4c96",
+        "android_client_info": {
+          "package_name": "com.fossatechnology.quransathiapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSABosvUfeLkeIDmOOcoChcaYL8BpZTns"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

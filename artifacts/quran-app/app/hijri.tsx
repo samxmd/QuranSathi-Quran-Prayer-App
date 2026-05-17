@@ -243,15 +243,16 @@ export default function HijriCalendarScreen() {
         {/* Weekday headers */}
         <View style={[styles.calGrid, styles.weekdayRow]}>
           {WEEKDAYS.map((d) => (
-            <Text
-              key={d}
-              style={[
-                styles.weekday,
-                { color: d === "Fri" ? theme.primary : theme.textSecondary },
-              ]}
-            >
-              {d}
-            </Text>
+            <View key={d} style={styles.weekdayCell}>
+              <Text
+                style={[
+                  styles.weekday,
+                  { color: d === "Fri" ? theme.primary : theme.textSecondary },
+                ]}
+              >
+                {d}
+              </Text>
+            </View>
           ))}
         </View>
 
@@ -267,31 +268,37 @@ export default function HijriCalendarScreen() {
             return (
               <TouchableOpacity
                 key={`${cell.day}`}
-                style={[
-                  styles.calCell,
-                  active && [styles.calCellActive, { backgroundColor: theme.primary }],
-                  !active && today && [styles.calCellToday, { borderColor: theme.primary }],
-                ]}
+                style={styles.calCell}
                 onPress={() => setSelectedDay(cell.day)}
                 activeOpacity={0.75}
               >
-                <Text
+                <View
                   style={[
-                    styles.calDayText,
-                    {
-                      color: active
-                        ? "#fff"
-                        : today
-                        ? theme.primary
-                        : isFriday
-                        ? theme.primary
-                        : theme.textPrimary,
-                      fontFamily: active || today ? "Inter_700Bold" : "Inter_400Regular",
-                    },
+                    styles.dayInner,
+                    active && [styles.dayInnerActive, { backgroundColor: theme.primary }],
+                    !active && today && [styles.dayInnerToday, { borderColor: theme.primary }],
                   ]}
                 >
-                  {cell.day}
-                </Text>
+                  <Text
+                    style={[
+                      styles.calDayText,
+                      {
+                        color: active
+                          ? "#fff"
+                          : today
+                          ? theme.primary
+                          : isFriday
+                          ? theme.primary
+                          : theme.textPrimary,
+                        fontFamily: active || today ? "Inter_700Bold" : "Inter_400Regular",
+                        textAlignVertical: "center",
+                        includeFontPadding: false,
+                      },
+                    ]}
+                  >
+                    {cell.day}
+                  </Text>
+                </View>
                 {event && !active && (
                   <View style={[styles.eventDot, { backgroundColor: accentGold }]} />
                 )}
@@ -409,24 +416,38 @@ const styles = StyleSheet.create({
 
   calGrid: { flexDirection: "row", flexWrap: "wrap" },
   weekdayRow: { marginBottom: 4 },
-  weekday: {
+  weekdayCell: {
     width: `${100 / 7}%`,
-    textAlign: "center",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+  },
+  weekday: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
-    paddingVertical: 4,
+    textAlign: "center",
   },
   calCell: {
     width: `${100 / 7}%`,
     aspectRatio: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 8,
     position: "relative",
   },
-  calCellActive: { borderRadius: 10 },
-  calCellToday: { borderWidth: 1.5, borderRadius: 10 },
-  calDayText: { fontSize: 14 },
+  dayInner: {
+    width: 38,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayInnerActive: {
+    borderRadius: 19,
+  },
+  dayInnerToday: {
+    borderWidth: 1.5,
+    borderRadius: 19,
+  },
+  calDayText: { fontSize: 14, textAlign: "center" },
   eventDot: {
     position: "absolute",
     bottom: 3,

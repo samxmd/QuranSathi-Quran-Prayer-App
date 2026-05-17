@@ -8,14 +8,17 @@ import {
   Text,
   TouchableOpacity,
   View,
+  BackHandler,
 } from "react-native";
-import { Stack } from "expo-router";
+import { Stack, useFocusEffect } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
 import { fetchTafsir } from "@/services/tafsirService";
 import { SURAHS } from "@/data/surahs";
+import { Skeleton } from "@/components/Skeleton";
+import { PageHeader } from "@/components/PageHeader";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 type Phase = "surah" | "ayah" | "reading";
@@ -51,7 +54,7 @@ function SurahRow({
         },
       ]}
       onPress={onPress}
-      activeOpacity={0.75}
+      activeOpacity={1}
     >
       <LinearGradient
         colors={
@@ -107,7 +110,7 @@ function AyahGrid({
               },
             ]}
             onPress={() => onSelect(n)}
-            activeOpacity={0.75}
+            activeOpacity={1}
           >
             <Text
               style={[
@@ -135,31 +138,28 @@ export default function TafsirHubScreen() {
   const [selectedAyah, setSelectedAyah] = useState<number | null>(null);
   const [tafsirText, setTafsirText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState(false);
-
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-
-  const fadeTransition = useCallback((fn: () => void) => {
-    Animated.timing(fadeAnim, { toValue: 0, duration: 140, useNativeDriver: true }).start(() => {
-      fn();
-      Animated.timing(fadeAnim, { toValue: 1, duration: 180, useNativeDriver: true }).start();
-    });
-  }, [fadeAnim]);
 
   const selectedSurah = selectedSurahId != null ? SURAHS.find((s) => s.id === selectedSurahId) : null;
   const totalAyahs = selectedSurah?.totalAyahs ?? 0;
 
+
   const handleSelectSurah = useCallback(
     (id: number) => {
-      fadeTransition(() => {
-        setSelectedSurahId(id);
-        setSelectedAyah(null);
-        setTafsirText("");
-        setError(false);
-        setPhase("ayah");
-      });
+      setSelectedSurahId(id);
+      setSelectedAyah(null);
+      setTafsirText("");
+      setError(false);
+      setPhase("ayah");
+
+      // Shimmer the grid slightly to make the transition feel weighted and premium
+      setPreparing(true);
+      setTimeout(() => {
+        setPreparing(false);
+      }, 450);
     },
-    [fadeTransition]
+    []
   );
 
   const handleRead = useCallback(async (ayahNumber?: number) => {
@@ -167,23 +167,25 @@ export default function TafsirHubScreen() {
     const ayahToRead = ayahNumber ?? selectedAyah;
     if (!ayahToRead) return;
 
-    fadeTransition(() => {
-      setSelectedAyah(ayahToRead);
-      setPhase("reading");
-      setTafsirText("");
-      setLoading(true);
-      setError(false);
-    });
+    setSelectedAyah(ayahToRead);
+    setPhase("reading");
+    setTafsirText("");
+    setLoading(true);
+    setError(false);
 
     try {
-      const text = await fetchTafsir(selectedSurahId, ayahToRead);
+      // Add a minimum delay of 500ms to make the transition feel smoother and less "glitchy"
+      const [text] = await Promise.all([
+        fetchTafsir(selectedSurahId, ayahToRead),
+        new Promise(resolve => setTimeout(resolve, 500))
+      ]);
       setTafsirText(text);
     } catch {
       setError(true);
     } finally {
       setLoading(false);
     }
-  }, [selectedSurahId, selectedAyah, fadeTransition]);
+  }, [selectedSurahId, selectedAyah]);
 
   const handleSelectAyah = useCallback(
     (n: number) => {
@@ -193,29 +195,44 @@ export default function TafsirHubScreen() {
   );
 
   const handleBack = useCallback(() => {
-    fadeTransition(() => {
-      if (phase === "reading") {
-        setPhase("ayah");
-        setTafsirText("");
-      } else {
-        setPhase("surah");
-        setSelectedAyah(null);
-        setTafsirText("");
-      }
-    });
-  }, [phase, fadeTransition]);
+    setLoading(false);
+    setPreparing(false);
+    
+    if (phase === "reading") {
+      setPhase("ayah");
+      setTafsirText("");
+    } else {
+      setPhase("surah");
+      setSelectedAyah(null);
+      setTafsirText("");
+    }
+  }, [phase]);
+
+  // Handle hardware back button on Android
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (phase !== "surah") {
+          handleBack();
+          return true;
+        }
+        return false;
+      };
+
+      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+      return () => subscription.remove();
+    }, [phase, handleBack])
+  );
 
   // ── Render header breadcrumb ──────────────────────────────────────────────
   const renderBreadcrumb = () => (
     <View style={styles.breadcrumb}>
       <TouchableOpacity
-        onPress={() =>
-          fadeTransition(() => {
-            setPhase("surah");
-            setSelectedAyah(null);
-            setTafsirText("");
-          })
-        }
+        onPress={() => {
+          setPhase("surah");
+          setSelectedAyah(null);
+          setTafsirText("");
+        }}
         style={[styles.crumb, phase === "surah" && { opacity: 1 }]}
       >
         <Text style={[styles.crumbText, { color: phase === "surah" ? "#F7F5EA" : "rgba(247,245,234,0.82)" }]}>
@@ -285,12 +302,21 @@ export default function TafsirHubScreen() {
       )}
 
       <SectionLabel text="SELECT AN AYAH" theme={theme} />
-      <AyahGrid
-        count={totalAyahs}
-        selected={selectedAyah}
-        onSelect={handleSelectAyah}
-        theme={theme}
-      />
+      
+      {preparing ? (
+        <View style={styles.ayahGrid}>
+          {Array.from({ length: Math.min(totalAyahs, 24) }, (_, i) => (
+            <Skeleton key={i} width={48} height={48} radius={12} />
+          ))}
+        </View>
+      ) : (
+        <AyahGrid
+          count={totalAyahs}
+          selected={selectedAyah}
+          onSelect={handleSelectAyah}
+          theme={theme}
+        />
+      )}
 
     </ScrollView>
   );
@@ -323,9 +349,12 @@ export default function TafsirHubScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading tafsir...</Text>
+        <View style={[styles.tafsirBody, { backgroundColor: theme.cardBackground, borderColor: theme.border, gap: 12 }]}>
+          <Skeleton height={20} width="90%" radius={6} />
+          <Skeleton height={20} width="95%" radius={6} />
+          <Skeleton height={20} width="70%" radius={6} />
+          <Skeleton height={20} width="85%" radius={6} />
+          <Skeleton height={20} width="40%" radius={6} />
         </View>
       ) : error ? (
         <View style={[styles.errorBox, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}>
@@ -370,22 +399,22 @@ export default function TafsirHubScreen() {
         }}
       />
 
-      {/* Banner */}
-      <LinearGradient
-        colors={theme.isDark ? [theme.gradientStart, theme.gradientEnd] : [theme.gradientStart, theme.gradientEnd]}
-        style={styles.banner}
+      <PageHeader
+        title="Tafsir Hub"
+        arabicTitle="تفسير القرآن"
+        subtitle="Ibn Kathir — English commentary"
+        showBack
+        onBack={phase !== "surah" ? handleBack : undefined}
       >
-        <Text style={styles.bannerTitle}>Tafsir Hub</Text>
-        <Text style={styles.bannerSubtitle}>Ibn Kathir — English commentary</Text>
         {renderBreadcrumb()}
-      </LinearGradient>
+      </PageHeader>
 
       {/* Content */}
-      <Animated.View style={[{ flex: 1 }, { opacity: fadeAnim }]}>
+      <View style={{ flex: 1 }}>
         {phase === "surah" && renderSurahPicker()}
         {phase === "ayah" && renderAyahPicker()}
         {phase === "reading" && renderReading()}
-      </Animated.View>
+      </View>
     </View>
   );
 }

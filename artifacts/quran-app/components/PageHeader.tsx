@@ -27,6 +27,12 @@ interface PageHeaderProps {
   rightSlot?: React.ReactNode;
   /** Extra content rendered inside the gradient, below the ornament */
   children?: React.ReactNode;
+  /** Custom back action */
+  onBack?: () => void;
+  /** Optional custom gradient colors */
+  customColors?: [string, string];
+  /** Optional custom accent color */
+  customAccent?: string;
 }
 
 export function PageHeader({
@@ -36,6 +42,9 @@ export function PageHeader({
   showBack = false,
   rightSlot,
   children,
+  onBack,
+  customColors,
+  customAccent,
 }: PageHeaderProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -45,9 +54,11 @@ export function PageHeader({
       ? Math.max(insets.top, NativeStatusBar.currentHeight ?? 0)
       : insets.top;
 
-  const gradColors: [string, string] = theme.isDark
-    ? [theme.gradientStart, theme.gradientEnd]
-    : [theme.gradientStart, theme.gradientEnd];
+  const gradColors = customColors || (theme.isDark
+    ? [theme.gradientStart, theme.gradientEnd] as [string, string]
+    : [theme.gradientStart, theme.gradientEnd] as [string, string]);
+
+  const accent = customAccent || theme.accent;
 
   return (
     <LinearGradient
@@ -67,7 +78,7 @@ export function PageHeader({
           {showBack ? (
             <TouchableOpacity
               style={styles.backBtn}
-              onPress={() => router.back()}
+              onPress={onBack ?? (() => router.back())}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Feather name="arrow-left" size={18} color="rgba(255,255,255,0.85)" />
@@ -84,7 +95,7 @@ export function PageHeader({
         {arabicTitle && (
           <Text style={styles.arabicTitle}>{arabicTitle}</Text>
         )}
-        <Text style={[styles.title, { color: theme.accent }]}>{title}</Text>
+        <Text style={[styles.title, { color: accent }]}>{title}</Text>
         {subtitle && (
           <Text style={styles.subtitle}>{subtitle}</Text>
         )}
@@ -93,7 +104,7 @@ export function PageHeader({
       {/* Gold ornament */}
       <View style={styles.ornRow}>
         <View style={styles.ornLine} />
-        <MaterialCommunityIcons name="star-crescent" size={12} color={theme.accent} />
+        <MaterialCommunityIcons name="star-crescent" size={12} color={accent} />
         <View style={styles.ornLine} />
       </View>
 

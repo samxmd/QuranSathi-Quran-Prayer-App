@@ -3,6 +3,8 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  InteractionManager,
   Modal,
   Platform,
   StatusBar as NativeStatusBar,
@@ -12,7 +14,7 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList, FlashListRef } from "@shopify/flash-list";
 import Feather from "@expo/vector-icons/Feather";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AyahCard } from "@/components/AyahCard";
@@ -20,7 +22,7 @@ import type { Ayah } from "@/data/ayahs";
 import { SURAHS } from "@/data/surahs";
 import { useQuran } from "@/context/QuranContext";
 import { useTheme } from "@/hooks/useTheme";
-import { fetchSurahAyahs, prefetchSurahAyahs, refreshSurahAyahs } from "@/services/quranApi";
+import { fetchSurahAyahs, prefetchSurahAyahs } from "@/services/quranApi";
 import { useAudio } from "@/hooks/useAudio";
 import { RECITERS } from "@/services/audioService";
 import { trackEvent } from "@/services/telemetry";
@@ -35,18 +37,22 @@ const ORNAMENT_SYMBOL = "\u2726";
 const META_SEPARATOR = " \u2022 ";
 
 export default function ReaderScreen() {
-  // Freeze initial params so the screen doesn't crash to "Surah not found" when URL clears during back navigation
-  const initialParams = useRef(useLocalSearchParams<{ id: string; ayah?: string }>());
-  const { id, ayah } = initialParams.current;
+  const params = useLocalSearchParams<{ id: string; ayah?: string }>();
+  const { id, ayah } = params;
 
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { setLastRead, fontSize, enabledLanguages, markSurahRead, defaultReciter } = useQuran();
+  const { setLastRead, fontSize, enabledLanguages, markSurahRead, defaultReciter, setDefaultReciter, isGlobalWbwEnabled, setGlobalWbwEnabled, isTransliterationEnabled, setIsTransliterationEnabled, incrementHasanat } = useQuran();
   const audio = useAudio(defaultReciter);
-  const listRef = useRef<any>(null);
-  const pendingScrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listRef = useRef<FlashListRef<Ayah>>(null);
   const openedKeyRef = useRef<string | null>(null);
   const navigation = useNavigation();
+  const ayahsRef = useRef<Ayah[]>([]);
+  const surahIdRef = useRef<number>(0);
+  const debounceTimerRef = useRef<any>(null);
+  const currentVisibleAyahRef = useRef<number>(1);
+
+  const [isListReady, setIsListReady] = useState(false);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("blur", () => {
@@ -56,7 +62,10 @@ export default function ReaderScreen() {
   }, [navigation, audio.freezeAudio]);
 
   const surahId = Number(id);
-  const surah = SURAHS.find((s) => s.id === surahId);
+  const surah = useMemo(() => {
+    if (!id) return undefined;
+    return SURAHS.find((s) => s.id === Number(id));
+  }, [id]);
   const targetAyahNumber = ayah ? Number(ayah) : undefined;
 
   const [ayahs, setAyahs] = useState<Ayah[]>([]);
@@ -65,7 +74,109 @@ export default function ReaderScreen() {
   const [audioErrorMessage, setAudioErrorMessage] = useState("");
   const [showReciterPicker, setShowReciterPicker] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSurahWbwEnabled, setIsSurahWbwEnabled] = useState(isGlobalWbwEnabled);
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
+  const enabledLanguagesKey = useMemo(() => enabledLanguages.join("|"), [enabledLanguages]);
+
+  // ─── Auto-Scroll ────────────────────────────────────────────────────────────
+  const SCROLL_SPEEDS = [
+    { label: "Slow", pxPerTick: 0.6 },
+    { label: "Med", pxPerTick: 1.4 },
+    { label: "Fast", pxPerTick: 2.4 },
+  ];
+  const [isAutoScrolling, setIsAutoScrolling] = useState(false);
+  const [scrollSpeedIdx, setScrollSpeedIdx] = useState(0);
+  const [isPillVisible, setIsPillVisible] = useState(true);
+  const autoScrollRef = useRef<any>(null);
+  const scrollOffsetRef = useRef(0);
+  const pillHideTimer = useRef<any>(null);
+  const pillAnim = useRef(new Animated.Value(0)).current; // 0 = visible, 1 = hidden
+
+  const showPill = useCallback(() => {
+    setIsPillVisible(true);
+    Animated.spring(pillAnim, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }).start();
+  }, [pillAnim]);
+
+  const hidePill = useCallback(() => {
+    Animated.timing(pillAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start(() => {
+      setIsPillVisible(false);
+    });
+  }, [pillAnim]);
+
+  const schedulePillHide = useCallback(() => {
+    if (pillHideTimer.current) clearTimeout(pillHideTimer.current);
+    pillHideTimer.current = setTimeout(() => { hidePill(); }, 3000);
+  }, [hidePill]);
+
+  const handleUserScrollStart = useCallback(() => {
+    showPill();
+    if (isAutoScrolling) schedulePillHide();
+  }, [showPill, schedulePillHide, isAutoScrolling]);
+
+  const handleScreenTap = useCallback(() => {
+    if (!isPillVisible) {
+      showPill();
+      if (isAutoScrolling) schedulePillHide();
+    }
+  }, [isPillVisible, showPill, schedulePillHide, isAutoScrolling]);
+
+  const stopAutoScroll = useCallback(() => {
+    if (autoScrollRef.current) {
+      cancelAnimationFrame(autoScrollRef.current);
+      autoScrollRef.current = null;
+    }
+    if (pillHideTimer.current) clearTimeout(pillHideTimer.current);
+    setIsAutoScrolling(false);
+    showPill();
+  }, [showPill]);
+
+  const startAutoScroll = useCallback((speedIdx: number) => {
+    if (autoScrollRef.current) cancelAnimationFrame(autoScrollRef.current);
+    const speed = SCROLL_SPEEDS[speedIdx];
+    
+    let lastTime = Date.now();
+    
+    const step = () => {
+      const now = Date.now();
+      const dt = Math.min(now - lastTime, 100); // cap dt at 100ms to avoid huge jumps if JS thread blocked
+      lastTime = now;
+      
+      const pxPerMs = speed.pxPerTick / 16;
+      scrollOffsetRef.current += pxPerMs * dt;
+      
+      listRef.current?.scrollToOffset({ offset: scrollOffsetRef.current, animated: false });
+      
+      autoScrollRef.current = requestAnimationFrame(step);
+    };
+    
+    autoScrollRef.current = requestAnimationFrame(step);
+    setIsAutoScrolling(true);
+    schedulePillHide();
+  }, [schedulePillHide]);
+
+  const toggleAutoScroll = useCallback(() => {
+    if (isAutoScrolling) {
+      stopAutoScroll();
+    } else {
+      startAutoScroll(scrollSpeedIdx);
+    }
+  }, [isAutoScrolling, scrollSpeedIdx, startAutoScroll, stopAutoScroll]);
+
+  const cycleSpeed = useCallback(() => {
+    const next = (scrollSpeedIdx + 1) % SCROLL_SPEEDS.length;
+    setScrollSpeedIdx(next);
+    if (isAutoScrolling) startAutoScroll(next);
+  }, [scrollSpeedIdx, isAutoScrolling, startAutoScroll]);
+
+  // Cleanup on unmount
+  useEffect(() => () => {
+    stopAutoScroll();
+    if (pillHideTimer.current) clearTimeout(pillHideTimer.current);
+  }, []);
+
+  // Keep refs in sync so audio callbacks never capture stale closures
+  useEffect(() => { ayahsRef.current = ayahs; }, [ayahs]);
+  useEffect(() => { surahIdRef.current = surah?.id ?? 0; }, [surah?.id]);
 
   const targetAyahIndex = useMemo(() => {
     if (!targetAyahNumber) return -1;
@@ -80,20 +191,32 @@ export default function ReaderScreen() {
         setIsRefreshing(true);
       } else {
         setLoadState("loading");
+        setIsListReady(false);
       }
 
       setErrorMessage("");
 
       try {
         const data = forceRefresh
-          ? await refreshSurahAyahs(surahIdToLoad)
-          : await fetchSurahAyahs(surahIdToLoad);
+          ? await fetchSurahAyahs(surahIdToLoad, enabledLanguages, true)
+          : await fetchSurahAyahs(surahIdToLoad, enabledLanguages);
 
         setAyahs(data);
         setLoadState("success");
-        setTimeout(() => {
-          markSurahRead(surahIdToLoad);
-        }, 300);
+
+        if (!forceRefresh && data.length > 0 && !data.some((item) => item.tajweed)) {
+          fetchSurahAyahs(surahIdToLoad, enabledLanguages, true)
+            .then((freshAyahs) => {
+              if (surahIdRef.current === surahIdToLoad && freshAyahs.some((item) => item.tajweed)) {
+                setAyahs(freshAyahs);
+              }
+            })
+            .catch(() => {});
+        }
+
+        InteractionManager.runAfterInteractions(() => {
+          markSurahRead(surahIdToLoad).catch(() => {});
+        });
       } catch (err: any) {
         if (forceRefresh) {
           Alert.alert(
@@ -110,7 +233,7 @@ export default function ReaderScreen() {
         }
       }
     },
-    [markSurahRead]
+    [enabledLanguages, markSurahRead]
   );
 
   useEffect(() => {
@@ -121,62 +244,141 @@ export default function ReaderScreen() {
 
     loadAyahs(surah.id);
     
-    setTimeout(() => {
+    const interactionTask = InteractionManager.runAfterInteractions(() => {
       trackEvent("surah.opened", {
         surahId: surah.id,
         surahName: surah.nameEnglish,
         sourceAyah: targetAyahNumber ?? null,
       }).catch(() => {});
+
+      // Sync Last Read immediately on open
       setLastRead({
         surahId: surah.id,
-        ayahNumber: 1,
+        ayahNumber: targetAyahNumber ?? 1,
         surahName: surah.nameEnglish,
         timestamp: Date.now(),
-      });
-    }, 100);
+      }).catch(() => {});
+    });
 
     return () => {
+      interactionTask.cancel();
       audio.stopAudio();
+      stopAutoScroll();
     };
   }, [surah?.id, targetAyahNumber]);
 
   useEffect(() => {
     if (loadState !== "success" || !surah) return;
-    if (surah.id > 1) prefetchSurahAyahs(surah.id - 1);
-    if (surah.id < SURAHS.length) prefetchSurahAyahs(surah.id + 1);
-  }, [loadState, surah?.id]);
+    if (surah.id > 1) prefetchSurahAyahs(surah.id - 1, enabledLanguages);
+    if (surah.id < SURAHS.length) prefetchSurahAyahs(surah.id + 1, enabledLanguages);
+  }, [enabledLanguages, loadState, surah?.id]);
 
   useEffect(() => {
-    if (loadState !== "success" || targetAyahIndex < 0 || !listRef.current) return;
+    if (!surah || loadState !== "success") return;
+    loadAyahs(surah.id);
+  }, [enabledLanguagesKey]);
 
-    pendingScrollTimeout.current = setTimeout(() => {
-      listRef.current?.scrollToOffset({
-        offset: Math.max(0, targetAyahIndex * 320),
-        animated: false,
+  useEffect(() => {
+    setIsSurahWbwEnabled(isGlobalWbwEnabled);
+  }, [isGlobalWbwEnabled, surah?.id]);
+
+  const performScroll = useCallback((index: number, animated = true) => {
+    if (!listRef.current || index < 0) return;
+
+    listRef.current.scrollToIndex({
+      index,
+      animated: false,
+      viewPosition: 0,
+      viewOffset: 12,
+    });
+
+    setTimeout(() => {
+      listRef.current?.scrollToIndex({
+        index,
+        animated: animated,
+        viewPosition: 0,
+        viewOffset: 12,
       });
-
-      pendingScrollTimeout.current = setTimeout(() => {
-        listRef.current?.scrollToIndex({
-          index: targetAyahIndex,
-          animated: true,
-          viewPosition: 0,
-          viewOffset: 12,
-        });
-      }, 50);
     }, 100);
+  }, []);
 
-    return () => {
-      if (pendingScrollTimeout.current) {
-        clearTimeout(pendingScrollTimeout.current);
-        pendingScrollTimeout.current = null;
+  // Update effect handles parameter changes when the reader is already open
+  const lastScrolledRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentKey = `${surah?.id}:${targetAyahIndex}`;
+    if (loadState === "success" && targetAyahIndex >= 0 && isListReady && lastScrolledRef.current !== currentKey) {
+      lastScrolledRef.current = currentKey;
+      performScroll(targetAyahIndex, true);
+    }
+  }, [loadState, targetAyahIndex, isListReady, performScroll, surah?.id]);
+
+  const handleListLoad = useCallback(() => {
+    setIsListReady(true);
+  }, []);
+
+  // ─── Viewability Logic (Precise Last Read) ──────────────────────────────────
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 300,
+  }).current;
+
+  const syncLastReadDebounced = useCallback((ayahNum: number) => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    
+    debounceTimerRef.current = setTimeout(() => {
+      if (surah) {
+        setLastRead({
+          surahId: surah.id,
+          ayahNumber: ayahNum,
+          surahName: surah.nameEnglish,
+          timestamp: Date.now(),
+        });
       }
-    };
-  }, [loadState, targetAyahIndex]);
+    }, 2000); // 2-second debounce for storage efficiency
+  }, [surah, setLastRead]);
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      const topItem = viewableItems[0].item as Ayah;
+      if (topItem && topItem.ayahNumber !== currentVisibleAyahRef.current) {
+        currentVisibleAyahRef.current = topItem.ayahNumber;
+        syncLastReadDebounced(topItem.ayahNumber);
+        
+        // Earn Hasanat for this unique ayah (deduplicated by context)
+        if (surah) {
+          incrementHasanat(`${surah.id}:${topItem.ayahNumber}`);
+        }
+      }
+    }
+  }).current;
 
   const handleRefresh = useCallback(() => {
     if (!surah || isRefreshing) return;
     loadAyahs(surah.id, { forceRefresh: true });
   }, [isRefreshing, loadAyahs, surah]);
+
+  // Stable function that always reads from refs — never stale inside onComplete callbacks
+  const startPlayingFromIndex = useCallback(
+    (index: number) => {
+      const playNext = async (i: number): Promise<void> => {
+        const currentAyahs = ayahsRef.current;
+        const nextAyah = currentAyahs[i];
+        if (!nextAyah) return; // end of surah
+
+        // scroll so the playing ayah is visible
+        try {
+          listRef.current?.scrollToIndex({ index: i, animated: true, viewPosition: 0.3 });
+        } catch {}
+
+        await audio.playAyah(nextAyah, surahIdRef.current, {
+          onComplete: () => { playNext(i + 1).catch(() => {}); },
+          onError: (err) => { setAudioErrorMessage(err.message); },
+        });
+      };
+      playNext(index).catch(() => {});
+    },
+    [audio]
+  );
 
   const handlePlay = useCallback(
     async (ayahItem: Ayah) => {
@@ -193,28 +395,12 @@ export default function ReaderScreen() {
         return;
       }
 
-      if (!surah) return;
-
-      const playAyahAtIndex = async (index: number): Promise<void> => {
-        const nextAyah = ayahs[index];
-        if (!nextAyah) return;
-
-        await audio.playAyah(nextAyah, surah.id, {
-          onComplete: () => {
-            playAyahAtIndex(index + 1).catch(() => {});
-          },
-          onError: (error) => {
-            setAudioErrorMessage(error.message);
-          },
-        });
-      };
-
-      const startIndex = ayahs.findIndex((item) => item.id === ayahItem.id);
+      const startIndex = ayahsRef.current.findIndex((item) => item.id === ayahItem.id);
       if (startIndex >= 0) {
-        await playAyahAtIndex(startIndex);
+        startPlayingFromIndex(startIndex);
       }
     },
-    [audio, ayahs, surah]
+    [audio, startPlayingFromIndex]
   );
 
   if (!surah) {
@@ -237,7 +423,8 @@ export default function ReaderScreen() {
         options={{
           title: surah.nameEnglish,
           headerStyle: { backgroundColor: theme.background },
-          headerTintColor: theme.textPrimary,
+          headerTintColor: theme.primary,
+          headerTitleStyle: { color: theme.primary, fontFamily: "Inter_700Bold", fontSize: 17 },
           headerShadowVisible: false,
           headerBackTitle: "Back",
           headerRight: () => (
@@ -254,6 +441,53 @@ export default function ReaderScreen() {
                 )}
               </TouchableOpacity>
               <TouchableOpacity
+                onPress={() => setIsTransliterationEnabled(!isTransliterationEnabled)}
+                style={[
+                  styles.reciterHeaderBtn,
+                  isTransliterationEnabled && { backgroundColor: theme.primary + "15", borderRadius: 8 }
+                ]}
+              >
+                <Text style={[
+                  styles.wbwHeaderText, 
+                  { color: isTransliterationEnabled ? theme.primary : theme.textSecondary }
+                ]}>TR</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setIsSurahWbwEnabled(!isSurahWbwEnabled)}
+                onLongPress={() => setGlobalWbwEnabled(!isGlobalWbwEnabled)}
+                style={[
+                  styles.reciterHeaderBtn,
+                  isSurahWbwEnabled && { backgroundColor: theme.primary + "15", borderRadius: 8 }
+                ]}
+              >
+                <Text style={[
+                  styles.wbwHeaderText, 
+                  { color: isSurahWbwEnabled ? theme.primary : theme.textSecondary }
+                ]}>WBW</Text>
+              </TouchableOpacity>
+              {/* Auto-scroll button */}
+              <View style={[
+                styles.reciterHeaderBtn, 
+                { flexDirection: "row", gap: 0, paddingHorizontal: 0 },
+                isAutoScrolling && { backgroundColor: theme.primary + "12", borderRadius: 8, paddingHorizontal: 4 }
+              ]}>
+                <TouchableOpacity onPress={toggleAutoScroll} style={{ padding: 6 }}>
+                  <Feather
+                    name={isAutoScrolling ? "pause" : "chevrons-down"}
+                    size={18}
+                    color={isAutoScrolling ? theme.primary : theme.textSecondary}
+                  />
+                </TouchableOpacity>
+                
+                {isAutoScrolling && (
+                  <TouchableOpacity onPress={cycleSpeed} style={{ paddingVertical: 6, paddingRight: 6, paddingLeft: 2 }}>
+                    <Text style={{ fontSize: 9, fontFamily: "Inter_800ExtraBold", color: theme.primary }}>
+                      {SCROLL_SPEEDS[scrollSpeedIdx].label.toUpperCase()}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TouchableOpacity
                 onPress={() => setShowReciterPicker(true)}
                 style={styles.reciterHeaderBtn}
               >
@@ -263,9 +497,6 @@ export default function ReaderScreen() {
           ),
         }}
       />
-
-      {/* Header section is now inside FlashList's ListHeaderComponent below */}
-
 
       <>
         {audioErrorMessage ? (
@@ -294,94 +525,116 @@ export default function ReaderScreen() {
           </View>
         ) : null}
 
-        <FlashList
-          ref={listRef}
-          data={ayahs}
-          keyExtractor={(item) => item.id}
-          ListHeaderComponent={
-            <LinearGradient colors={gradientColors} style={styles.surahHeader}>
-              <View style={[styles.headerPattern, { pointerEvents: "none" }]}>
-                <View style={styles.hpCircle1} />
-                <View style={styles.hpCircle2} />
-              </View>
-
-              <Text style={styles.surahNumberChip}>Surah {surah.id}</Text>
-              <Text style={styles.surahArabic}>{surah.nameArabic}</Text>
-              <Text style={styles.surahEnglish}>{surah.nameEnglish}</Text>
-              <Text style={styles.surahNepali}>{surah.nameNepali}</Text>
-              <Text style={styles.surahMeta}>
-                {surah.meaning}
-                {META_SEPARATOR}
-                {surah.totalAyahs} Ayat
-                {META_SEPARATOR}
-                {surah.revelationType}
-              </Text>
-
-              {surahId !== 9 && (
-                <View style={styles.basmala}>
-                  <Text style={styles.basmalaText}>{BASMALA_TEXT}</Text>
+        {loadState === "loading" ? (
+          <View style={[styles.center, { paddingVertical: 100 }]}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
+              Loading {surah.nameEnglish}...
+            </Text>
+          </View>
+        ) : loadState === "error" ? (
+          <View style={[styles.center, { paddingVertical: 100 }]}>
+            <Text style={[styles.errorTitle, { color: theme.textPrimary }]}>Failed to load</Text>
+            <Text style={[styles.errorSub, { color: theme.textSecondary }]}>{errorMessage}</Text>
+            <TouchableOpacity
+              style={[styles.emptyBtn, { backgroundColor: theme.primary, marginTop: 12 }]}
+              onPress={() => loadAyahs(surah.id)}
+            >
+              <Text style={[styles.emptyBtnText, { color: theme.primaryForeground }]}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <FlashList
+            ref={listRef}
+            onLoad={handleListLoad}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            onScroll={(e) => {
+              if (!isAutoScrolling) {
+                scrollOffsetRef.current = Math.max(0, e.nativeEvent.contentOffset.y);
+              }
+            }}
+            scrollEventThrottle={16}
+            onScrollBeginDrag={() => {
+              if (isAutoScrolling) stopAutoScroll();
+              handleUserScrollStart();
+            }}
+            onTouchStart={handleScreenTap}
+            data={ayahs}
+            keyExtractor={(item) => item.id}
+            initialScrollIndex={targetAyahIndex >= 0 ? targetAyahIndex : undefined}
+            // @ts-ignore - The property exists in FlashList but might be missing in current type definitions
+            estimatedItemSize={250}
+            ListHeaderComponent={
+              <LinearGradient colors={gradientColors} style={styles.surahHeader}>
+                <View style={[styles.headerPattern, { pointerEvents: "none" } as any]}>
+                  <View style={styles.hpCircle1} />
+                  <View style={styles.hpCircle2} />
                 </View>
-              )}
 
-              <View style={styles.headerOrnament}>
-                <View style={styles.ornamentLine} />
-                <Text style={styles.ornamentStar}>{ORNAMENT_SYMBOL}</Text>
-                <View style={styles.ornamentLine} />
-              </View>
-            </LinearGradient>
-          }
-          renderItem={({ item }) => (
-            <AyahCard
-              ayah={item}
-              surahName={surah.nameEnglish}
-              surahId={surahId}
-              fontSize={fontSize}
-              enabledLanguages={enabledLanguages}
-              audioStatus={audio.status}
-              isCurrentAudio={audio.currentAyahId === item.id}
-              onPlay={handlePlay}
-            />
-          )}
-          contentContainerStyle={{
-            paddingBottom: bottomInset + (audio.status !== "idle" ? 120 : 60),
-          }}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={ayahs.length > 0 || loadState !== "success"}
-          ListEmptyComponent={
-            loadState === "loading" ? (
-              <View style={[styles.center, { paddingVertical: 40 }]}>
-                <ActivityIndicator size="large" color={theme.primary} />
-                <Text style={[styles.loadingText, { color: theme.textSecondary }]}>
-                  Loading {surah.nameEnglish}...
+                <Text style={styles.surahNumberChip}>Surah {surah.id}</Text>
+                <Text style={styles.surahArabic}>{surah.nameArabic}</Text>
+                <Text style={styles.surahEnglish}>{surah.nameEnglish}</Text>
+                <Text style={styles.surahNepali}>{surah.nameNepali}</Text>
+                <Text style={styles.surahMeta}>
+                  {surah.meaning}
+                  {META_SEPARATOR}
+                  {surah.totalAyahs} Ayat
+                  {META_SEPARATOR}
+                  {surah.revelationType}
                 </Text>
-              </View>
-            ) : loadState === "error" ? (
-              <View style={[styles.center, { paddingVertical: 40 }]}>
-                <Text style={[styles.errorTitle, { color: theme.textPrimary }]}>Failed to load</Text>
-                <Text style={[styles.errorSub, { color: theme.textSecondary }]}>{errorMessage}</Text>
-              </View>
-            ) : null
-          }
-          ListFooterComponent={
-            loadState === "success" && ayahs.length > 0 ? (
-              <View style={styles.footer}>
-                <View style={styles.footerOrnament}>
-                  <View style={[styles.footerLine, { backgroundColor: theme.border }]} />
-                  <Text style={[styles.footerStar, { color: theme.accent }]}>
-                    {ORNAMENT_SYMBOL}
+
+                {surahId !== 9 && (
+                  <View style={styles.basmala}>
+                    <Text style={styles.basmalaText}>{BASMALA_TEXT}</Text>
+                  </View>
+                )}
+
+                <View style={styles.headerOrnament}>
+                  <View style={styles.ornamentLine} />
+                  <Text style={styles.ornamentStar}>{ORNAMENT_SYMBOL}</Text>
+                  <View style={styles.ornamentLine} />
+                </View>
+              </LinearGradient>
+            }
+            renderItem={({ item }) => (
+              <AyahCard
+                ayah={item}
+                surahName={surah.nameEnglish}
+                surahId={surahId}
+                fontSize={fontSize}
+                enabledLanguages={enabledLanguages}
+                audioStatus={audio.status}
+                isCurrentAudio={audio.currentAyahId === item.id}
+                onPlay={handlePlay}
+                isWbwEnabled={isSurahWbwEnabled}
+              />
+            )}
+            contentContainerStyle={{
+              paddingBottom: bottomInset + (audio.status !== "idle" ? 120 : 60),
+            }}
+            showsVerticalScrollIndicator={false}
+            ListFooterComponent={
+              ayahs.length > 0 ? (
+                <View style={styles.footer}>
+                  <View style={styles.footerOrnament}>
+                    <View style={[styles.footerLine, { backgroundColor: theme.border }]} />
+                    <Text style={[styles.footerStar, { color: theme.accent }]}>
+                      {ORNAMENT_SYMBOL}
+                    </Text>
+                    <View style={[styles.footerLine, { backgroundColor: theme.border }]} />
+                  </View>
+                  <Text style={[styles.footerText, { color: theme.textSecondary }]}>
+                    End of {surah.nameEnglish}
                   </Text>
-                  <View style={[styles.footerLine, { backgroundColor: theme.border }]} />
+                  <Text style={[styles.footerArabic, { color: theme.primary }]}>
+                    {surah.nameArabic}
+                  </Text>
                 </View>
-                <Text style={[styles.footerText, { color: theme.textSecondary }]}>
-                  End of {surah.nameEnglish}
-                </Text>
-                <Text style={[styles.footerArabic, { color: theme.primary }]}>
-                  {surah.nameArabic}
-                </Text>
-              </View>
-            ) : null
-          }
-        />
+              ) : null
+            }
+          />
+        )}
       </>
 
 
@@ -482,6 +735,7 @@ export default function ReaderScreen() {
               ]}
               onPress={() => {
                 setAudioErrorMessage("");
+                setDefaultReciter(r).catch(() => {});
                 audio.setReciter(r);
                 setShowReciterPicker(false);
               }}
@@ -519,8 +773,24 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 16, fontFamily: "Inter_400Regular" },
   errorTitle: { fontSize: 18, fontFamily: "Inter_700Bold", textAlign: "center", marginTop: 4 },
   errorSub: { fontSize: 14, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 22 },
-  headerActions: { flexDirection: "row", alignItems: "center" },
-  reciterHeaderBtn: { marginRight: 8, padding: 4 },
+  emptyBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyBtnText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  reciterHeaderBtn: { padding: 6, alignItems: "center", justifyContent: "center" },
+  wbwHeaderText: {
+    fontSize: 10,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.5,
+  },
   surahHeader: {
     padding: 28,
     paddingBottom: 24,
@@ -563,8 +833,8 @@ const styles = StyleSheet.create({
   },
   surahArabic: {
     fontSize: 44,
-    fontFamily: "Inter_400Regular",
-    color: "#FFFFFF",
+    fontFamily: "ScheherazadeNew_400Regular",
+    color: "#F7E7B4",
     marginTop: 8,
     ...Platform.select({
       web: { textShadow: "0px 1px 4px rgba(0,0,0,0.25)" },
@@ -578,7 +848,7 @@ const styles = StyleSheet.create({
   surahEnglish: {
     fontSize: 20,
     fontFamily: "Inter_700Bold",
-    color: "#FFFFFF",
+    color: "#FFF8E1",
     textAlign: "center",
   },
   surahNepali: {
@@ -604,8 +874,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(201,168,76,0.4)",
   },
   basmalaText: {
-    fontSize: 20,
-    fontFamily: "Inter_400Regular",
+    fontSize: 32,
+    fontFamily: "ScheherazadeNew_400Regular",
     color: "#FFFFFF",
     textAlign: "center",
   },
@@ -629,7 +899,7 @@ const styles = StyleSheet.create({
   footerLine: { flex: 1, height: 1 },
   footerStar: { fontSize: 12 },
   footerText: { fontSize: 13, fontFamily: "Inter_400Regular" },
-  footerArabic: { fontSize: 26, fontFamily: "Inter_400Regular" },
+  footerArabic: { fontSize: 32, fontFamily: "ScheherazadeNew_400Regular" },
   audioErrorBanner: {
     marginHorizontal: 16,
     marginTop: 16,
@@ -657,6 +927,21 @@ const styles = StyleSheet.create({
     right: 0,
     borderTopWidth: 1,
     paddingTop: 0,
+    zIndex: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: -3 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 8,
+      },
+      web: {
+        boxShadow: "0px -3px 12px rgba(0,0,0,0.1)",
+      } as any,
+    }),
   },
   progressTrack: { height: 3 },
   progressFill: { height: 3 },
@@ -718,5 +1003,82 @@ const styles = StyleSheet.create({
   reciterRowStyle: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
   nonInteractive: {
     pointerEvents: "none",
+  },
+  autoScrollPill: {
+    position: "absolute",
+    left: 40,
+    right: 40,
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 50,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    gap: 0,
+    zIndex: 50,
+    ...Platform.select({
+      web: {
+        boxShadow: "0px 6px 24px rgba(0,0,0,0.18)",
+      } as any,
+      native: {
+        shadowColor: "#000",
+        shadowOpacity: 0.14,
+        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 10,
+      },
+    }),
+  },
+  pillSpeedArea: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    flex: 1,
+    paddingVertical: 4,
+  },
+  speedDot: {
+    borderRadius: 99,
+  },
+  pillSpeedLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    marginLeft: 4,
+  },
+  pillDivider: {
+    width: 1,
+    height: 28,
+    marginHorizontal: 12,
+  },
+  pillPlayBtn: {
+    alignItems: "center",
+    gap: 3,
+  },
+  pillPlayCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pillAutoLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_600SemiBold",
+  },
+  autoScrollBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  speedBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  speedBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: "#FFFFFF",
   },
 });

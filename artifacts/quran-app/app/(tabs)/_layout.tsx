@@ -5,6 +5,7 @@ import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useTranslation } from "react-i18next";
 
 export default function TabLayout() {
   const theme = useTheme();
@@ -12,6 +13,7 @@ export default function TabLayout() {
   const isDark = colorScheme === "dark";
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
+  const { t } = useTranslation();
 
   return (
     <Tabs
@@ -69,7 +71,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: t("tabHome"),
           tabBarIcon: ({ color }) => (
             <Feather name="home" size={22} color={color} />
           ),
@@ -78,7 +80,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="surahs"
         options={{
-          title: "Quran",
+          title: t("tabQuran"),
           tabBarIcon: ({ color }) => (
             <Feather name="book-open" size={22} color={color} />
           ),
@@ -87,7 +89,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="audio"
         options={{
-          title: "Audio",
+          title: t("tabAudio"),
           tabBarIcon: ({ color }) => (
             <Feather name="headphones" size={22} color={color} />
           ),
@@ -96,16 +98,16 @@ export default function TabLayout() {
       <Tabs.Screen
         name="prayer"
         options={{
-          title: "Prayer",
+          title: t("tabPrayer"),
           tabBarIcon: ({ color }) => (
-            <Feather name="moon" size={22} color={color} />
+            <Feather name="clock" size={22} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="utilities"
         options={{
-          title: "Utilities",
+          title: t("tabUtilities"),
           tabBarIcon: ({ color }) => (
             <Feather name="grid" size={22} color={color} />
           ),

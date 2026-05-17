@@ -12,19 +12,95 @@ const dbFile = path.join(dbDir, "quran_v1.db");
 const oldTsFile = path.join(appRoot, "data", "offlineQuran.ts");
 
 const API_BASE = "https://cdn.jsdelivr.net/gh/fawazahmed0/quran-api@1/editions";
+const ALQURAN_BASE = "https://api.alquran.cloud/v1";
 const EDITIONS = {
   arabic: "ara-quranuthmanihaf",
-  english: "eng-ummmuhammad",
   nepali: "nep-ahlalhadithcent",
   bangla: "ben-muhiuddinkhan",
+  hindi: "hin-muhammadfarooqk",
 };
 
-async function fetchJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Request failed: ${res.status} ${url}`);
+const MIN_BUNDLED_DB_SIZE_BYTES = 1024 * 1024;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function hasUsableBundledDb() {
+  try {
+    const stats = await fs.stat(dbFile);
+    return stats.size >= MIN_BUNDLED_DB_SIZE_BYTES;
+  } catch {
+    return false;
   }
-  return res.json();
+}
+
+function shouldSkipRemoteGeneration() {
+  if (process.env.FORCE_QURAN_DB_REBUILD === "1") {
+    return false;
+  }
+
+  return Boolean(
+    process.env.EAS_BUILD ||
+    process.env.CI ||
+    process.env.EXPO_OFFLINE_BUILD,
+  );
+}
+
+async function fetchJsonWithRetry(url, label, maxAttempts = 5) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url);
+
+      if (res.ok) {
+        return res.json();
+      }
+
+      const retryAfterHeader = res.headers.get("retry-after");
+      const retryAfterMs = retryAfterHeader
+        ? Number(retryAfterHeader) * 1000
+        : attempt * 2000;
+
+      const error = new Error(`${label} request failed: ${res.status} ${url}`);
+      error.status = res.status;
+      lastError = error;
+
+      if ((res.status === 429 || res.status >= 500) && attempt < maxAttempts) {
+        await sleep(retryAfterMs);
+        continue;
+      }
+
+      throw error;
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxAttempts) {
+        await sleep(attempt * 2000);
+        continue;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+async function fetchJson(url) {
+  return fetchJsonWithRetry(url, "Generic");
+}
+
+async function fetchEnglishSurahData(surahId) {
+  const json = await fetchJsonWithRetry(
+    `${ALQURAN_BASE}/surah/${surahId}/editions/quran-uthmani,en.sahih`,
+    `English surah ${surahId}`,
+  );
+  const editions = Array.isArray(json?.data) ? json.data : [];
+  const englishEdition = editions[1]?.ayahs ?? [];
+
+  return englishEdition.map((ayah) => ({
+    verse: ayah?.numberInSurah,
+    text: ayah?.text ?? "",
+  }));
 }
 
 async function loadSurahMetadata() {
@@ -49,20 +125,54 @@ async function loadSurahMetadata() {
   return surahs;
 }
 
+// Known typo corrections for the nep-ahlalhadithcent API source.
+// Key format: "surahId:verseNumber" → [wrongText, correctText]
+const NEPALI_CORRECTIONS = {
+  "1:1": ["शुर गर्दछु", "शुरू गर्दछु"],
+  "16:105": ["गर्दछन जसलाई", "गर्दछन् जसलाई"],
+};
+
+function applyNepaliCorrections(surahId, verseNumber, text) {
+  let corrected = text;
+
+  // Global cleanups for Legacy Preeti-to-Unicode conversion artifacts
+  // 1. Icelandic Thorn (Þ) was mistakenly left instead of Devanagari Nukta (़)
+  corrected = corrected.replace(/Þ/g, "़");
+
+  // 2. The letter 'm' was left over from Preeti typing (where 'm' = 'फ')
+  corrected = corrected.replace(/आपूmलाई/g, "आफूलाई");
+  corrected = corrected.replace(/आप्mना/g, "आफ्ना");
+  corrected = corrected.replace(/भूmठ्लाए/g, "झुठ्लाए");
+  corrected = corrected.replace(/फुपूm/g, "फुपू");
+  corrected = corrected.replace(/पि़mरऔन/g, "फ़िरऔन"); // The Þ became ़, so पि़mरऔन -> फ़िरऔन
+
+  const key = `${surahId}:${verseNumber}`;
+  const exactCorrection = NEPALI_CORRECTIONS[key];
+  if (exactCorrection) {
+    corrected = corrected.replace(exactCorrection[0], exactCorrection[1]);
+  }
+  return corrected;
+}
+
 async function fetchSurahData(surahId) {
-  const [arabicJson, englishJson, nepaliJson, banglaJson] = await Promise.all([
+
+  const [arabicJson, englishAyahs, nepaliJson, banglaJson, hindiJson, tajweedJson] = await Promise.all([
     fetchJson(`${API_BASE}/${EDITIONS.arabic}/${surahId}.min.json`),
-    fetchJson(`${API_BASE}/${EDITIONS.english}/${surahId}.min.json`),
+    fetchEnglishSurahData(surahId),
     fetchJson(`${API_BASE}/${EDITIONS.nepali}/${surahId}.min.json`),
     fetchJson(`${API_BASE}/${EDITIONS.bangla}/${surahId}.min.json`),
+    fetchJson(`${API_BASE}/${EDITIONS.hindi}/${surahId}.min.json`),
+    fetchJson(`https://api.quran.com/api/v4/verses/by_chapter/${surahId}?fields=text_uthmani_tajweed&per_page=300`),
   ]);
 
   const arabic = arabicJson?.chapter ?? [];
-  const english = englishJson?.chapter ?? [];
+  const english = englishAyahs ?? [];
   const nepali = nepaliJson?.chapter ?? [];
   const bangla = banglaJson?.chapter ?? [];
+  const hindi = hindiJson?.chapter ?? [];
+  const tajweedVerses = tajweedJson?.verses ?? [];
 
-  if (arabic.length !== english.length || arabic.length !== nepali.length || arabic.length !== bangla.length) {
+  if (arabic.length !== english.length || arabic.length !== nepali.length || arabic.length !== bangla.length || arabic.length !== hindi.length) {
     throw new Error(`Mismatched ayah counts for surah ${surahId}`);
   }
 
@@ -70,9 +180,11 @@ async function fetchSurahData(surahId) {
     surahId,
     ayahNumber: ayah.verse,
     arabic: ayah.text,
+    arabicTajweed: tajweedVerses[index]?.text_uthmani_tajweed ?? "",
     english: english[index]?.text ?? "",
-    nepali: nepali[index]?.text ?? "",
+    nepali: applyNepaliCorrections(surahId, ayah.verse, nepali[index]?.text ?? ""),
     bangla: bangla[index]?.text ?? "",
+    hindi: hindi[index]?.text ?? "",
   }));
 }
 
@@ -81,7 +193,15 @@ async function main() {
   
   // Ensure directory exists
   await fs.mkdir(dbDir, { recursive: true });
-  
+
+  if (shouldSkipRemoteGeneration() && await hasUsableBundledDb()) {
+    const dbStats = await fs.stat(dbFile);
+    console.log(
+      `Using bundled Quran database (${(dbStats.size / 1024 / 1024).toFixed(2)} MB); skipping remote regeneration.`,
+    );
+    return;
+  }
+
   // Create/Replace database
   try {
     await fs.access(dbFile);
@@ -112,13 +232,15 @@ async function main() {
       english TEXT,
       nepali TEXT,
       bangla TEXT,
+      hindi TEXT,
+      arabic_tajweed TEXT,
       FOREIGN KEY (surah_id) REFERENCES surahs(id)
     );
 
     CREATE INDEX idx_ayahs_surah ON ayahs(surah_id);
 
     CREATE VIRTUAL TABLE ayahs_fts USING fts5(
-      arabic, english, nepali, bangla,
+      arabic, english, nepali, bangla, hindi,
       content='ayahs', content_rowid='id'
     );
   `);
@@ -129,13 +251,13 @@ async function main() {
   `);
 
   const insertAyah = db.prepare(`
-    INSERT INTO ayahs (surah_id, ayah_number, arabic, english, nepali, bangla)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO ayahs (surah_id, ayah_number, arabic, english, nepali, bangla, hindi, arabic_tajweed)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertFts = db.prepare(`
-    INSERT INTO ayahs_fts (rowid, arabic, english, nepali, bangla)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO ayahs_fts (rowid, arabic, english, nepali, bangla, hindi)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
 
   const surahs = await loadSurahMetadata();
@@ -163,7 +285,9 @@ async function main() {
         ayah.arabic,
         ayah.english,
         ayah.nepali,
-        ayah.bangla
+        ayah.bangla,
+        ayah.hindi,
+        ayah.arabicTajweed
       );
       
       // Sync with FTS
@@ -172,11 +296,15 @@ async function main() {
         ayah.arabic,
         ayah.english,
         ayah.nepali,
-        ayah.bangla
+        ayah.bangla,
+        ayah.hindi
       );
       totalAyahs++;
     }
   }
+
+  console.log("🧹 Vacuuming database for maximum size reduction...");
+  db.exec("VACUUM");
 
   db.close();
   console.log("\n✅ Database generation complete!");

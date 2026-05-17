@@ -12,6 +12,7 @@ import { router, Stack } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/hooks/useTheme";
+import { useTranslation } from "react-i18next";
 import { SURAHS } from "@/data/surahs";
 import { dbService } from "@/services/database";
 import type { Ayah } from "@/data/ayahs";
@@ -83,6 +84,7 @@ export default function SearchScreen() {
   const [focused, setFocused] = useState(false);
   const [ayahResults, setAyahResults] = useState<AyahResult[]>([]);
   const [isLoadingAyahs, setIsLoadingAyahs] = useState(false);
+  const { t } = useTranslation();
 
   // Sync surah search
   const surahResults = useMemo<SearchResult[]>(() => {
@@ -204,7 +206,7 @@ export default function SearchScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen
         options={{
-          title: "Search",
+          title: t("search"),
           headerStyle: { backgroundColor: theme.background },
           headerTintColor: theme.textPrimary,
           headerShadowVisible: false,
@@ -229,7 +231,7 @@ export default function SearchScreen() {
         )}
         <TextInput
           style={[styles.input, { color: theme.textPrimary }]}
-          placeholder="Search by surah, name, or verse..."
+          placeholder={t("searchPlaceholder")}
           placeholderTextColor={theme.textSecondary}
           value={query}
           onChangeText={setQuery}
@@ -269,10 +271,10 @@ export default function SearchScreen() {
             <View style={styles.emptyState}>
               <Feather name="search" size={48} color={theme.border} />
               <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
-                Search the Quran
+                {t("searchQuran")}
               </Text>
               <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                Type a surah name, meaning, or number to find what you're looking for.
+                {t("searchPlaceholder")}
               </Text>
               {/* Popular shortcuts */}
               <View style={styles.shortcuts}>
@@ -290,9 +292,9 @@ export default function SearchScreen() {
           ) : (
             <View style={styles.emptyState}>
               <Feather name="frown" size={48} color={theme.border} />
-              <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>No results found</Text>
+              <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>{t("noResults")}</Text>
               <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                Try searching by a different name, meaning, or surah number.
+                {t("noResultsSub")}
               </Text>
             </View>
           )

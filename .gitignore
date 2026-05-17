@@ -41,6 +41,11 @@ testem.log
 .DS_Store
 Thumbs.db
 
+# Android signing
+artifacts/quran-app/android/keystore.properties
+artifacts/quran-app/android/*.jks
+artifacts/quran-app/android/*.keystore
+
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 

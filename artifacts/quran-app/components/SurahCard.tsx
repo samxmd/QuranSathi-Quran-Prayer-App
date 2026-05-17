@@ -172,6 +172,6 @@ const styles = StyleSheet.create({
 
   // Right
   right: { alignItems: "flex-end", gap: 4, flexShrink: 0 },
-  arabic: { fontSize: 21, fontFamily: "Inter_400Regular" },
+  arabic: { fontSize: 24, fontFamily: "ScheherazadeNew_400Regular" },
   chevron: { opacity: 0.4 },
 });

@@ -112,12 +112,12 @@ export function TranslationDownloadModal({ visible, onClose }: TranslationDownlo
     setDownloadingId(edition.identifier);
     setProgress(0);
 
-    const success = await translationDownloadService.downloadEdition(
+    const result = await translationDownloadService.downloadEdition(
       edition.identifier,
       (p) => setProgress(p)
     );
 
-    if (success) {
+    if (result.success) {
       await registerDownloadedLanguage(edition.identifier);
       await toggleLanguage(edition.identifier);
       setDownloadingId(null);
@@ -125,7 +125,7 @@ export function TranslationDownloadModal({ visible, onClose }: TranslationDownlo
       onClose();
     } else {
       setDownloadingId(null);
-      Alert.alert("Error", "Failed to download translation. Please check your internet connection.");
+      Alert.alert("Download failed", result.errorMessage ?? "Failed to download translation. Please try again.");
     }
   };
 

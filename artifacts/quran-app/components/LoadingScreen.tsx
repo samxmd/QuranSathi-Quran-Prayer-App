@@ -11,6 +11,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@/hooks/useTheme";
+import * as Application from "expo-application";
 
 const { width, height } = Dimensions.get("window");
 
@@ -140,7 +141,7 @@ export function LoadingScreen() {
           </View>
 
           {/* Version Footer */}
-          <Text style={styles.version}>v1.0.0</Text>
+          <Text style={styles.version}>v{Application.nativeApplicationVersion || "1.0.0"}</Text>
         </Animated.View>
       </LinearGradient>
     </View>

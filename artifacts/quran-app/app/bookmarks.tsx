@@ -13,11 +13,13 @@ import Feather from "@expo/vector-icons/Feather";
 import * as Haptics from "expo-haptics";
 import { useQuran } from "@/context/QuranContext";
 import { useTheme } from "@/hooks/useTheme";
+import { useTranslation } from "react-i18next";
 
 export default function BookmarksScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { bookmarks, removeBookmark, duaBookmarks, removeDuaBookmark } = useQuran();
+  const { t } = useTranslation();
 
   const bottomInset = Platform.OS === "web" ? 34 : insets.bottom;
   const isEmpty = bookmarks.length === 0 && duaBookmarks.length === 0;
@@ -36,7 +38,7 @@ export default function BookmarksScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Stack.Screen
         options={{
-          title: "Bookmarks",
+          title: t("bookmarks"),
           headerStyle: { backgroundColor: theme.background },
           headerTintColor: theme.textPrimary,
           headerShadowVisible: false,
@@ -46,9 +48,9 @@ export default function BookmarksScreen() {
       {isEmpty ? (
         <View style={styles.empty}>
           <Feather name="bookmark" size={48} color={theme.textSecondary} />
-          <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>No bookmarks yet</Text>
+          <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>{t("noBookmarks")}</Text>
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-            Save ayahs from the reader or duas from the new Dua tab to keep them close.
+            {t("noBookmarksSub")}
           </Text>
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: theme.primary }]}
@@ -56,7 +58,7 @@ export default function BookmarksScreen() {
             activeOpacity={0.85}
           >
             <Text style={[styles.primaryBtnText, { color: theme.primaryForeground }]}>
-              Browse Quran
+              {t("startReading")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -67,16 +69,13 @@ export default function BookmarksScreen() {
         >
           {bookmarks.length > 0 && (
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Quran Ayahs</Text>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t("quranAyahs")}</Text>
               {bookmarks.map((item) => (
                 <TouchableOpacity
                   key={item.ayahId}
                   style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
                   onPress={() =>
-                    router.push({
-                      pathname: "/reader/[id]",
-                      params: { id: item.surahId, ayah: item.ayahNumber },
-                    })
+                    router.push(`/reader/${item.surahId}?ayah=${item.ayahNumber}`)
                   }
                   activeOpacity={0.82}
                 >
@@ -84,7 +83,7 @@ export default function BookmarksScreen() {
                     <View>
                       <Text style={[styles.cardTitle, { color: theme.primary }]}>{item.surahName}</Text>
                       <Text style={[styles.cardMeta, { color: theme.textSecondary }]}>
-                        Ayah {item.ayahNumber}
+                        {t("ayah")} {item.ayahNumber}
                       </Text>
                     </View>
                     <TouchableOpacity onPress={() => handleAyahRemove(item.ayahId)} style={styles.removeBtn}>
@@ -101,11 +100,13 @@ export default function BookmarksScreen() {
 
           {duaBookmarks.length > 0 && (
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Saved Duas</Text>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>{t("savedDuas")}</Text>
               {duaBookmarks.map((item) => (
-                <View
+                <TouchableOpacity
                   key={item.id}
                   style={[styles.card, { backgroundColor: theme.cardBackground, borderColor: theme.border }]}
+                  onPress={() => router.push(`/duas?cat=${item.categoryId}&id=${item.id}`)}
+                  activeOpacity={0.82}
                 >
                   <View style={styles.cardHeader}>
                     <View style={{ flex: 1 }}>
@@ -124,7 +125,7 @@ export default function BookmarksScreen() {
                   <Text style={[styles.translation, { color: theme.textPrimary }]} numberOfLines={3}>
                     {item.english}
                   </Text>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           )}

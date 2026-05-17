@@ -1,7 +1,7 @@
 {
   "cli": {
-    "version": ">= 12.0.0",
-    "appVersionSource": "remote"
+    "version": ">= 18.7.0",
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -10,13 +10,20 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "credentialsSource": "local",
       "android": {
         "buildType": "app-bundle"
+      },
+      "ios": {
+        "distribution": "store"
       }
     }
   }
